@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 탁구 강화학습 3D 🏓🧠</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI','Malgun Gothic',sans-serif; background:#070b16; color:#e8eefc; overflow:hidden; }
+  #ui { position:fixed; top:0; left:0; right:0; z-index:10; display:flex; justify-content:center; gap:16px; padding:12px; pointer-events:none; flex-wrap:wrap; }
+  .card { background:rgba(10,16,30,0.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:10px 18px; min-width:150px; }
+  .card.p1 { border-left:4px solid #4fc3f7; }
+  .card.p2 { border-right:4px solid #ff7ab6; }
+  .name { font-size:13px; font-weight:600; }
+  .p1 .name { color:#4fc3f7; }
+  .p2 .name { color:#ff7ab6; text-align:right; }
+  .score { font-size:36px; font-weight:800; line-height:1.05; }
+  .p2 .score { text-align:right; }
+  .mini { font-size:11px; color:#9fb0d0; }
+  .p2 .mini { text-align:right; }
+  .center { background:rgba(10,16,30,0.72); border-radius:14px; padding:8px 18px; text-align:center; border:1px solid rgba(255,255,255,0.12); min-width:220px; }
+  .center .row { font-size:11px; color:#9fb0d0; margin:1px 0; }
+  .center .row b { color:#ffd54f; font-size:14px; }
+  #spark { display:block; margin:4px auto 0; }
+  #controls { position:fixed; bottom:0; left:0; right:0; z-index:10; display:flex; justify-content:center; align-items:center; gap:10px; padding:12px; flex-wrap:wrap; }
+  button { background:#2a4a7a; color:#fff; border:none; padding:9px 16px; border-radius:8px; font-size:14px; cursor:pointer; pointer-events:auto; }
+  button:hover { background:#3a5f9a; }
+  button.primary { background:#4fc3f7; color:#08203a; font-weight:700; }
+  .lbl { font-size:13px; color:#9fb0d0; }
+  #toast { position:fixed; top:150px; left:50%; transform:translateX(-50%); z-index:20; font-size:26px; font-weight:800; pointer-events:none; opacity:0; transition:opacity .15s; text-shadow:0 2px 12px rgba(0,0,0,.7); }
+  #hint { position:fixed; bottom:58px; left:0; right:0; text-align:center; font-size:12px; color:#6b7fa5; z-index:10; padding:0 10px; }
+</style>
+</head>
+<body>
+  <div id="ui">
+    <div class="card p1">
+      <div class="name">🔵 블루 AI · 세트승 <span id="g1">0</span></div>
+      <div class="score" id="s1">0</div>
+      <div class="mini">💥스매시승 <span id="sm1">0</span> · 🛡️수비 <span id="sv1">0</span> · 실책 <span id="er1">0</span></div>
+    </div>
+    <div class="center">
+      <div class="row">세트 <b id="setn">1</b> · 11점 선취(2점차) · 서브 <b id="srv">🔵</b> · <b id="lead">동점</b></div>
+      <div class="row">학습 에피소드 <b id="ep">0</b> · 탐험율 ε <b id="eps">0.90</b></div>
+      <div class="row">현재 랠리 <b id="rally">0</b> · 최근 평균 <b id="avg">0.0</b></div>
+      <div class="row" id="fb" style="color:#ffcf6b">📋 패인 분석 · 대기중…</div>
+      <canvas id="spark" width="220" height="30"></canvas>
+    </div>
+    <div class="card p2">
+      <div class="name"><span id="g2">0</span> 세트승 · 레드 AI 🔴</div>
+      <div class="score" id="s2" style="text-align:right">0</div>
+      <div class="mini">💥스매시승 <span id="sm2">0</span> · 🛡️수비 <span id="sv2">0</span> · 실책 <span id="er2">0</span></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="hint">실제 탁구 규칙 · <b>서브</b>는 자기 코트→네트→리시버 코트 · <b>2점마다 서브 교대</b>(듀스 1점) · <b>세트마다 첫 서버 교대</b> · 11점(2점차) · 💥스매시/🛡️수비는 통계 · <b>Q-러닝</b> 학습 · 🖱️ <b>드래그=회전, 휠=줌</b>(전환=프리셋)</div>
+
+  <div id="controls">
+    <button class="primary" id="startBtn">시작 / 정지</button>
+    <button id="resetBtn">리셋(학습 초기화)</button>
+    <span class="lbl">속도</span>
+    <button data-speed="1">1x</button>
+    <button data-speed="3">3x</button>
+    <button data-speed="6">6x</button>
+    <button data-speed="12">12x</button>
+    <button data-speed="24">24x</button>
+    <button data-speed="48">48x</button>
+    <button data-speed="100">100x</button>
+    <button data-speed="1000">1000x</button>
+    <button data-speed="3000">3000x</button>
+    <span class="lbl">탐험율 ε</span>
+    <input type="range" id="epsSlider" min="0" max="1" step="0.01" value="0.90" style="pointer-events:auto; width:110px; vertical-align:middle;">
+    <span class="lbl" id="epsVal">0.90</span>
+    <label class="lbl" style="pointer-events:auto; cursor:pointer;"><input type="checkbox" id="epsLockChk" style="vertical-align:middle;"> 고정(자동감소 정지)</label>
+    <span class="lbl">시점</span>
+    <button id="camBtn">전환</button>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+window.addEventListener('load', ()=>{ if(typeof THREE==='undefined'){ document.body.innerHTML='<div style="padding:40px;color:#fff">Three.js CDN 로드 실패 — 인터넷 연결 후 다시 열어주세요.</div>'; }});
+
+// ===== 규격 (실제 탁구 비율: 2.74m × 1.525m, 네트 0.1525m, 공 40mm) =====
+const TL=14, TW=7.8, NET_H=0.78, halfL=TL/2, halfW=TW/2;
+const R=0.15, GRAV=0.015, REST=0.7;
+const TABLE_TOP=0;              // 테이블 상면 y
+const FLOOR_Y=-6;                        // 바닥 y (floor.position.y)
+const HALF_FALL=(FLOOR_Y+TABLE_TOP)/2;   // 바닥~상면의 절반(-3): 공이 여기까지 떨어지면 그 랠리 패배
+const PADDLE_MINY=0.95;        // 라켓이 테이블을 뚫지 않는 최소 높이
+const paddleX = halfL+1.2;      // 라켓은 테이블에서 떨어져 대기
+const HOMEX=paddleX;            // 라켓 기본(홈) x 위치 — 대기 시 베이스라인
+const HITX=HOMEX;               // 요격 라인(=베이스라인). 스텝인은 랠리를 무너뜨려 비활성
+const Y_HIT=1.3;               // 이상적 타구 높이
+const REACH=1.5;              // 라켓 3D 리치(구) — 넓힐수록 받아넘길 확률↑(랠리 지속)
+const PSPEED=0.52;            // (참조용) 기준 이동속도
+const PMAX=0.86;             // 라켓 최고 속도 (가속 상한) — 빠른 공도 따라잡아 랠리 유지
+const PACC=0.085;            // 라켓 가속도 — 멀리서 달려올수록 스윙이 빨라짐(운동량↑)
+const MAGNUS=0.03;           // 마그누스 계수: 회전이 만드는 휘어짐/낙하
+const SPIN_DECAY=0.992;      // 회전 감쇠(매 스텝)
+const RALLY_CAP=80;          // 안전장치: 지나치게 긴 랠리는 무승부 리셋
+const WIN_POINTS=11;         // 세트 승리 점수 (2점차)
+
+let scene,camera,renderer, table,net,ball, paddle1,paddle2;
+let b, p1,p2;
+let running=false, speed=1, camMode=0;
+let epsLock=false;   // 탐험율(ε) 고정 여부: true면 자동감소를 멈추고 슬라이더 값 유지
+let firstServer;   // 이번 세트 첫 서버 (세트마다 교대)
+// 실제 규칙: 2점마다 서브 교대, 듀스(10-10 이상)면 1점마다
+function currentServer(){
+  const pts=p1.score+p2.score;
+  const deuce = p1.score>=WIN_POINTS-1 && p2.score>=WIN_POINTS-1;
+  const idx = deuce ? (pts%2) : (Math.floor(pts/2)%2);
+  const other = firstServer===p1?p2:p1;
+  return idx===0 ? firstServer : other;
+}
+
+// ===== 강화학습 (Q-러닝, 컨텍스추얼 밴딧) =====
+// 상태: (내가 치는 위치 z버킷 3) x (상대 위치 z버킷 3) = 9
+// 행동: zAim{-1,0,1} x depth{얕게,깊게} = 6
+const ALPHA=0.35;
+// 행동 = 3D 각도: yaw(좌우 5단계) × pitch(상하 4단계). 전방 반구 전체 각도를 커버.
+const YAWS=[-0.75,-0.38,0,0.38,0.75];          // 좌 ~ 우 (조준 각도) — 랠리 유지되는 범위
+// 라켓 면 각도(pitch)를 5단계로 넓힘: 닫힌 펀치 ~ 열린 루프까지 다양한 각도
+const PITCHES=[
+  {name:'block', pitch:0.20, power:0.30, top:0.2,  smash:false, block:true}, // 블록: 짧고 낮게 받아넘김(수비 전용)
+  {name:'punch', pitch:0.12, power:0.52, top:0.5,  smash:false}, // 닫힌 면·플랫 펀치(낮게 찌름)
+  {name:'drive', pitch:0.22, power:0.50, top:0.6,  smash:false}, // 낮고 빠른 드라이브
+  {name:'smash', pitch:0.24, power:0.70, top:1.2,  smash:true},  // 강한 탑스핀 강타
+  {name:'mid',   pitch:0.38, power:0.46, top:0.35, smash:false}, // 중간 아크
+  {name:'loop',  pitch:0.50, power:0.44, top:0.7,  smash:false}, // 열린 면·높은 루프(강한 탑스핀)
+];
+const ACTIONS=[];
+PITCHES.forEach(pt=>YAWS.forEach(y=>ACTIONS.push({pitch:pt.pitch,power:pt.power,top:pt.top,yaw:y,smash:pt.smash,block:!!pt.block,name:pt.name})));
+function zBucket(z){ return Math.max(0,Math.min(2, Math.floor((z+halfW)/(TW/3)))); }
+// 위협도: 들어오는 공이 스매시이거나 매우 빠르면 1(위협), 아니면 0
+function threatLevel(s){ const spd=Math.hypot(s.vx||0,s.vy||0,s.vz||0); return (s.isSmash||spd>0.7)?1:0; }
+// 상태: 내 위치 z(3) × 상대 위치 z(3) × 공의 z(3) × 위협도(2) = 54가지
+//  → 어디서·무엇이(강타/느린공) 오는지까지 보고 수비/공격을 상황별로 학습
+function stateKey(myZ, oppZ, ballZ, threat){ return zBucket(myZ)+'_'+zBucket(oppZ)+'_'+zBucket(ballZ)+'_'+threat; }
+
+function makeBrain(){ return { Q:{}, eps:0.9, ok:0, err:0 }; }
+function qRow(brain, key){ if(!brain.Q[key]) brain.Q[key]=new Array(ACTIONS.length).fill(0); return brain.Q[key]; }
+const TEMP=0.22;   // 소프트맥스 온도: 낮으면 최고행동 집중, 높으면 다양·창의적
+function chooseAction(brain, key){
+  const row=qRow(brain,key);
+  // ε 확률로 완전 무작위(넓은 탐험)
+  if(Math.random()<brain.eps) return Math.floor(Math.random()*ACTIONS.length);
+  // 그 외엔 소프트맥스(볼츠만): 좋은 행동일수록 자주, 하지만 확률적으로 다양하게 골라 '같은 샷 반복'을 깨고 창의적 변주
+  let mx=-Infinity; for(const v of row) if(v>mx) mx=v;
+  let sum=0; const w=new Array(row.length);
+  for(let i=0;i<row.length;i++){ const e=Math.exp((row[i]-mx)/TEMP); w[i]=e; sum+=e; }
+  let r=Math.random()*sum;
+  for(let i=0;i<row.length;i++){ r-=w[i]; if(r<=0) return i; }
+  return row.length-1;
+}
+function learn(brain, key, a, reward){
+  const row=qRow(brain,key);
+  row[a] += ALPHA*(reward - row[a]);
+}
+
+// ===== 통계 =====
+let episodes=0, rally=0, rallyHist=[];
+function recordEpisode(len){ episodes++; rallyHist.push(len); if(rallyHist.length>200) rallyHist.shift(); }
+function recentAvg(){ const n=Math.min(30,rallyHist.length); if(!n) return 0; let s=0; for(let i=rallyHist.length-n;i<rallyHist.length;i++) s+=rallyHist[i]; return s/n; }
+
+// ===== 씬 =====
+function init(){
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0x070b16);
+  scene.fog=new THREE.Fog(0x070b16,28,60);
+  camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight,0.1,200); setCamera();
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled=true; document.body.appendChild(renderer.domElement);
+  renderer.domElement.style.cursor='grab';
+  renderer.domElement.addEventListener('mousedown',()=>renderer.domElement.style.cursor='grabbing');
+  addEventListener('mouseup',()=>renderer.domElement.style.cursor='grab');
+  setupCameraControls(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0x8899cc,0.6));
+  const dl=new THREE.DirectionalLight(0xffffff,0.9); dl.position.set(6,18,8); dl.castShadow=true;
+  dl.shadow.camera.left=-20;dl.shadow.camera.right=20;dl.shadow.camera.top=20;dl.shadow.camera.bottom=-20;
+  dl.shadow.mapSize.set(1024,1024); scene.add(dl);
+
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(90,90), new THREE.MeshStandardMaterial({color:0x0a1122,roughness:1}));
+  floor.rotation.x=-Math.PI/2; floor.position.y=-6; floor.receiveShadow=true; scene.add(floor);
+
+  table=new THREE.Mesh(new THREE.BoxGeometry(TL,0.4,TW), new THREE.MeshStandardMaterial({color:0x0d5a8a,roughness:0.5,metalness:0.1}));
+  table.position.y=-0.2; table.receiveShadow=true; scene.add(table);
+
+  const lm=new THREE.LineBasicMaterial({color:0xffffff});
+  addLine([[-halfL,0.05,-halfW],[halfL,0.05,-halfW],[halfL,0.05,halfW],[-halfL,0.05,halfW],[-halfL,0.05,-halfW]],lm);
+  addLine([[-halfL,0.05,0],[halfL,0.05,0]],lm);
+
+  net=new THREE.Mesh(new THREE.BoxGeometry(0.15,NET_H,TW), new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.35}));
+  net.position.y=NET_H/2; scene.add(net);
+
+  [[halfL-1,-halfW+1],[halfL-1,halfW-1],[-halfL+1,-halfW+1],[-halfL+1,halfW-1]].forEach(([x,z])=>{
+    const leg=new THREE.Mesh(new THREE.BoxGeometry(0.4,5.6,0.4), new THREE.MeshStandardMaterial({color:0x0a3a5a}));
+    leg.position.set(x,-3,z); scene.add(leg);
+  });
+
+  paddle1=makePaddle(0x4fc3f7); paddle2=makePaddle(0xff7ab6); scene.add(paddle1); scene.add(paddle2);
+  ball=new THREE.Mesh(new THREE.SphereGeometry(R,20,20), new THREE.MeshStandardMaterial({color:0xffffff,emissive:0x222222}));
+  ball.castShadow=true; scene.add(ball);
+
+  p1={x:-paddleX, side:-1, color:'blue', colorHex:0x4fc3f7, score:0, games:0, saves:0, smashWins:0, err:0, mesh:paddle1, cx:-HOMEX, cz:0, cy:1, ry:0, rz:0, tYaw:0, tPitch:0, mvx:0, mvy:0, mvz:0, swing:0, brain:makeBrain()};
+  p2={x: paddleX, side: 1, color:'red',  colorHex:0xff7ab6, score:0, games:0, saves:0, smashWins:0, err:0, mesh:paddle2, cx: HOMEX, cz:0, cy:1, ry:Math.PI, rz:0, tYaw:Math.PI, tPitch:0, mvx:0, mvy:0, mvz:0, swing:0, brain:makeBrain()};
+  p2.brain = p1.brain;   // ★ 셀프플레이: 두 선수가 하나의 뇌를 공유 → 대칭 게임이므로 승률 50:50, 경험 2배로 둘 다 강해짐
+
+  firstServer = p1;
+  newPoint(currentServer());
+  addEventListener('resize', onResize);
+}
+function makePaddle(color){
+  const g=new THREE.Group();
+  const blade=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.15,24), new THREE.MeshStandardMaterial({color,roughness:0.4}));
+  blade.rotation.z=Math.PI/2; blade.castShadow=true; g.add(blade);
+  const h=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.8,0.35), new THREE.MeshStandardMaterial({color:0x3a2a1a})); h.position.y=-0.9; g.add(h);
+  return g;
+}
+function addLine(pts,mat){ scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(...p))),mat)); }
+// ===== 카메라: 구면좌표(orbit) — 마우스로 자유 조종 =====
+// 프리셋(전환 버튼): [반지름 R, 방위각 theta, 극각 phi]
+const CAM_PRESETS=[ [23.3,0,1.03], [24.9,-0.94,1.25], [23.1,0,0.10] ];
+let camR=23.3, camTheta=0, camPhi=1.03;
+function setCamera(){ const p=CAM_PRESETS[camMode]||CAM_PRESETS[0]; camR=p[0]; camTheta=p[1]; camPhi=p[2]; applyCam(); }
+function applyCam(){
+  camPhi=Math.max(0.05, Math.min(1.52, camPhi));   // 지평선 아래/천정 넘어가지 않도록
+  camR =Math.max(8, Math.min(60, camR));
+  const sinP=Math.sin(camPhi);
+  camera.position.set(camR*sinP*Math.sin(camTheta), camR*Math.cos(camPhi), camR*sinP*Math.cos(camTheta));
+  camera.lookAt(0,0,0);
+}
+function setupCameraControls(el){
+  let dragging=false, lx=0, ly=0, pinchD=0;
+  const down=(x,y)=>{ dragging=true; lx=x; ly=y; };
+  const move=(x,y)=>{ if(!dragging) return; camTheta-=(x-lx)*0.006; camPhi-=(y-ly)*0.006; lx=x; ly=y; applyCam(); };
+  const up=()=>{ dragging=false; };
+  el.addEventListener('mousedown', e=>down(e.clientX,e.clientY));
+  addEventListener('mousemove', e=>move(e.clientX,e.clientY));
+  addEventListener('mouseup', up);
+  el.addEventListener('wheel', e=>{ e.preventDefault(); camR*=(1+Math.sign(e.deltaY)*0.08); applyCam(); }, {passive:false});
+  // 터치: 1손가락 회전, 2손가락 핀치 줌
+  el.addEventListener('touchstart', e=>{ if(e.touches.length===1) down(e.touches[0].clientX,e.touches[0].clientY);
+    else if(e.touches.length===2){ const a=e.touches[0],b=e.touches[1]; pinchD=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); dragging=false; } }, {passive:false});
+  el.addEventListener('touchmove', e=>{ e.preventDefault();
+    if(e.touches.length===1) move(e.touches[0].clientX,e.touches[0].clientY);
+    else if(e.touches.length===2){ const a=e.touches[0],b=e.touches[1]; const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); if(pinchD){ camR*=pinchD/d; applyCam(); } pinchD=d; } }, {passive:false});
+  el.addEventListener('touchend', up);
+}
+function onResize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); }
+
+// ===== 포인트 시작(서브) =====
+function newPoint(server){
+  const S = server.side;
+  // 정식 서브: 서버가 쳐서 자기 코트(+)에 한 번 튀고 → 네트 넘어 → 리시버 코트에 안착
+  b={
+    x:S*5, y:2.5, z:(Math.random()*3-1.5)*0.3,
+    vx:-S*0.20, vy:-0.10, vz:(Math.random()-0.5)*0.03,
+    lastHitter: server,            // 서브 넣은 쪽
+    expectSide: -S,                 // 최종적으로 리시버 코트에 바운스해야 함
+    bounceOnExpect:0, canReturn:false,
+    pending:null,                   // 서브 자체는 학습 대상 아님
+    isSmash:false, smashSpeed:0, rallySmashes:0, spin:{x:0,y:0,z:0},
+    serve:true, serveOwnBounced:false,   // 서브: 자기 코트 첫 바운스 허용
+    over:false
+  };
+  ballHist=[];
+  rally=0;
+  resetPaddles();   // 포인트(한판)마다 라켓을 첫 위치(홈)로 복귀
+}
+// 라켓을 시작 위치·정지 상태로 리셋
+function resetPaddles(){
+  [p1,p2].forEach(p=>{
+    p.cx=p.side*HOMEX; p.cy=1; p.cz=0;         // 홈 위치
+    p.mvx=0; p.mvy=0; p.mvz=0; p.swing=0;      // 속도 초기화
+    p.ry = p.side<0?0:Math.PI; p.rz=0;         // 기본 방향
+    p.tYaw = p.side<0?0:Math.PI; p.tPitch=0;
+    if(p.mesh){ p.mesh.position.set(p.cx,p.cy,p.cz); p.mesh.rotation.set(0,p.ry,p.rz); }
+  });
+}
+
+// ===== 예측: 3D 요격 지점 (바운스 후 이상적 타구점) =====
+function predictInterception(p, s){
+  s = s||b;
+  let x=s.x,y=s.y,z=s.z,vx=s.vx,vy=s.vy,vz=s.vz,g=0, land=null;
+  const sp=s.spin||{x:0,y:0,z:0};               // 회전(마그누스)까지 예측에 반영
+  let wx=sp.x, wy=sp.y, wz=sp.z;
+  const bx=p.side*HITX;   // 스텝인: 베이스라인이 아니라 네트에 더 가까운 라인에서 요격 → 넓은 각도
+  // 이미 리시버 코트에 바운스했으면(canReturn) 지금 궤적을 그대로 노림 (2번째 바운스 기다리지 말 것)
+  let bounced = s.canReturn?1:0;
+  let apex = bounced? Math.max(y,R) : 0;
+  let H = (bounced && vy<=0) ? Math.max(1.2, Math.min(2.5, apex-0.2)) : null;
+  while(g++<1800){
+    vy-=GRAV;
+    vx+=MAGNUS*(wy*vz-wz*vy); vy+=MAGNUS*(wz*vx-wx*vz); vz+=MAGNUS*(wx*vy-wy*vx);
+    wx*=SPIN_DECAY; wy*=SPIN_DECAY; wz*=SPIN_DECAY;
+    x+=vx; y+=vy; z+=vz;
+    if(y<R && vy<0 && Math.abs(x)<=halfL && Math.abs(z)<=halfW){
+      y=R; vy=-vy*REST;
+      if(Math.sign(x)===p.side){ bounced++; if(bounced===1) land={x,y:R,z}; }
+    }
+    if(bounced>=1){
+      if(vy>0) apex=Math.max(apex,y);                                   // 바운스 후 상승 정점
+      if(H===null && vy<=0) H=Math.max(1.2, Math.min(2.5, apex-0.2));   // 정점 지나면 타점 확정
+      if(H!==null && vy<0 && y<=H) return {x,y:Math.max(R,y),z};        // 타점에서 타격(스매시 기회)
+      if((p.side>0&&x>=bx)||(p.side<0&&x<=bx))
+        return {x:bx, y:Math.max(R,Math.min(2.6,y)), z};
+    }
+    if(Math.abs(x)>HOMEX+2.5) return land||{x:bx,y:Math.max(R,y),z};
+    if(y<-4) break;
+  }
+  return land||{x:bx, y:Y_HIT, z:0};
+}
+const clampD=(d,m)=> Math.max(-m,Math.min(m,d));
+
+// 반응 지연: AI는 REACT 스텝 전의 공 상태로 판단 (사람의 반응시간 모사)
+// 빠른 공(스매시)엔 집중해서 지연을 줄임 → 강타 수비 도달률↑
+const REACT=9, REACT_FAST=4;
+let ballHist=[];
+function perceivedBall(lag){ lag=lag==null?REACT:lag; return ballHist.length>lag ? ballHist[ballHist.length-1-lag] : b; }
+
+// ===== AI 3D 이동 (범위 제한 없음) =====
+function moveAI(p){
+  const lag = b.isSmash ? REACT_FAST : REACT;   // 강타가 오면 반응을 빠르게
+  const s = perceivedBall(lag);
+  const incoming = (p.side>0)? s.vx>0 : s.vx<0;
+  let tx,ty,tz;
+  if(incoming){ const pr=predictInterception(p, s); tx=pr.x; ty=pr.y; tz=pr.z; }
+  else { tx=p.side*HOMEX; ty=Y_HIT; tz=0; }   // 대기: 홈 복귀
+  // 목표 속도(거리 비례·상한 PMAX): 멀면 전력 질주, 가까우면 감속하여 정지
+  const dvx=clampD(tx-p.cx, PMAX), dvy=clampD(ty-p.cy, PMAX), dvz=clampD(tz-p.cz, PMAX);
+  // 현재 속도를 목표 속도로 '가속'(최대 PACC) → 멀리서 달려올수록 스윙이 점점 빨라짐(운동량↑)
+  p.mvx+=clampD(dvx-p.mvx, PACC); p.mvy+=clampD(dvy-p.mvy, PACC); p.mvz+=clampD(dvz-p.mvz, PACC);
+  p.cx+=p.mvx; p.cy+=p.mvy; p.cz+=p.mvz;
+  p.swing=Math.hypot(p.mvx,p.mvy,p.mvz);   // 접촉 순간 라켓 스윙 속도(공에 실리는 운동량)
+  // 테이블 충돌: 판 위에선 상면을 뚫지 않음 (범위 제한 아님, 물리 충돌)
+  if(Math.abs(p.cx)<=halfL+0.1 && Math.abs(p.cz)<=halfW+0.1) p.cy=Math.max(p.cy, PADDLE_MINY);
+  else p.cy=Math.max(p.cy, R);
+  // 라켓 각도: 학습된 슛 각도로 부드럽게 기울임
+  p.ry += (p.tYaw - p.ry)*0.4;
+  p.rz += (p.tPitch - p.rz)*0.4;
+  p.mesh.position.set(p.cx, p.cy, p.cz);
+  p.mesh.rotation.set(0, p.ry, p.rz);
+}
+
+function randn(){ return (Math.random()+Math.random()+Math.random()-1.5)*0.9; }
+
+// ===== 리시버가 공을 침 (RL 행동) =====
+function doReturn(p){
+  const opp = p===p1?p2:p1;
+  const threat = threatLevel(b);                      // 지금 들어온 공의 위협도(강타/빠른공)
+  const key = stateKey(p.cz, opp.cz, b.z, threat);    // 위협·공위치까지 포함한 상태
+  const ai = chooseAction(p.brain, key);
+  const act = ACTIONS[ai];
+  const os = -p.side; // 상대 코트 부호
+
+  // 들어온 공이 스매시였다면 = 강한 수비 성공
+  const defendedSmash = b.isSmash;
+  if(defendedSmash){
+    p.saves++;                                       // 수비 성공(통계)
+    // 강타를 침착한 블록으로 받으면 큰 보상, 무리하게 맞받아치면 작은 보상 → 안정적 수비를 학습
+    learn(p.brain, key, ai, act.block ? +0.6 : +0.15);
+    showToast(act.block?'🛡️ 완벽한 블록!':'🛡️ 강한 수비!', p.color);
+  }
+
+  // 학습된 라켓 각도로 타구 → 궤적/착지는 결과 (실행 오차 포함)
+  const pitch = act.pitch + randn()*0.05;
+  const yaw   = act.yaw  + randn()*0.06;
+  let speed = act.power;
+
+  // ▶ 라켓 스윙 운동량: 멀리서 가속해 온 라켓일수록(swing 큼) 공에 속도가 더 실린다(실제 물리)
+  const swing = p.swing || 0;
+  if(act.smash){
+    b.rallySmashes++;
+    const dist = Math.abs(b.x - os*HOMEX);           // 접촉 → 상대 베이스라인 거리
+    // 파워 + 라켓 스윙속도(운동량) + 달려온 거리 + 연타 가속
+    speed = act.power + 0.70*swing + 0.10*(dist/(2*HOMEX)) + 0.04*(b.rallySmashes-1);
+    speed = Math.min(speed, 0.95);
+    b.isSmash=true; b.smashSpeed=speed;
+    spawnBurst(p.colorHex);
+  } else {
+    speed = act.power + 0.35*swing;                  // 일반 타구도 스윙 운동량 일부 반영
+    b.isSmash=false; b.smashSpeed=0;
+  }
+
+  const hs = speed*Math.cos(pitch);
+  let vy = speed*Math.sin(pitch);
+  let vx = os * hs*Math.cos(yaw);
+  let vz = hs*Math.sin(yaw);
+
+  // ▶ 회전(스핀): 탑스핀은 공을 아래로 꽂고(마그누스), 조준(yaw) 방향으로 약한 사이드스핀
+  const topspin = act.top + Math.abs(randn())*0.1;
+  // 사이드스핀: 마그누스 Δvz = -MAGNUS·spin.y·vx 이므로 sign(vx)를 곱해야 양 코트에서 대칭이 된다
+  // (탑스핀의 z처럼) — 없으면 한쪽 선수의 샷만 바깥으로 휘어 승률이 한쪽으로 쏠림
+  const side    = 0.2*Math.sign(vz)*Math.sign(vx)*Math.min(1,Math.abs(vz/(Math.abs(vx)+1e-4)));
+  b.spin={ x:0, y:side, z:-topspin*Math.sign(vx) };
+
+  // ▶ 네트 통과 보장: 탑스핀의 하강력(마그누스)까지 반영한 유효 중력으로 최소 상승각 확보.
+  //   라켓은 x=±8.2에서 대기 → 공이 네트까지 먼 거리를 날아가므로 낮은 궤적은 네트에 걸림.
+  if(Math.abs(vx)>1e-4){
+    const gEff = GRAV + MAGNUS*Math.abs(b.spin.z*vx);   // 중력 + 탑스핀 하강력
+    const t = Math.abs(b.x)/Math.abs(vx);              // 네트 도달까지 스텝 수
+    const vyNeed = (NET_H + 0.45 - b.y)/t + 0.5*gEff*t; // 네트 위 여유를 넘길 최소 vy
+    if(vy < vyNeed) vy = vyNeed;
+  }
+
+  // ▶ 인바운드 보정: 이 타구가 상대 코트(테이블 위)에 떨어지도록 vx·vz를 다듬어
+  //   아웃/네트를 줄여 랠리를 지속시킨다. (승부는 '배치'로 상대를 흔들어 도달 못하게 하는 데서 남)
+  {
+    const disc = vy*vy + 2*GRAV*Math.max(0, b.y - R);
+    const tLand = (vy + Math.sqrt(Math.max(0,disc)))/GRAV || 1;   // 발사~착지 스텝(중력 근사)
+    const depth = (act.smash ? 0.82 : 0.55) + randn()*0.06;       // 스매시는 깊게, 일반은 안전 깊이
+    const wantX = os*halfL*Math.max(0.30, Math.min(0.92, depth)); // 상대 코트 30~92% 지점에 착지
+    vx = (wantX - b.x)/tLand;                                     // 목표 깊이에 정확히 떨어지도록 수평속도 재조정
+    const zLim = halfW*0.74;   // 배치 각을 안쪽으로 제한 → 상대가 따라잡을 여지를 남겨 랠리 지속
+    const zLand = b.z + vz*tLand;
+    if(Math.abs(zLand)>zLim) vz = (Math.sign(zLand)*zLim - b.z)/tLand;   // 코트 밖으로 나가면 사이드 각 축소
+  }
+
+  b.vx=vx; b.vy=vy; b.vz=vz;               // 접촉 지점(현재 공 위치)에서 발사
+  b.lastHitter=p; b.expectSide=os; b.bounceOnExpect=0; b.canReturn=false;
+  // ▶ 배치(placement): 이 타구가 상대(opp)에게서 얼마나 먼 곳에 떨어지나 → 빈 코트 공략 학습
+  const tReach = Math.abs(os*HOMEX - b.x)/(Math.abs(vx)+1e-4);   // 상대 베이스라인 도달 스텝
+  const landZ = b.z + vz*tReach;                                 // 예상 착지 z
+  const openness = Math.min(1, Math.abs(landZ - opp.cz)/halfW);  // 0(상대 정면)~1(반대편 끝)
+  b.pending={ brain:p.brain, key, a:ai, based:false, smash:act.smash, place:openness };
+
+  // 라켓 면 각도 = 학습된 슛 각도
+  p.tYaw = Math.atan2(-vz, vx);
+  p.tPitch = Math.asin(Math.max(-1,Math.min(1, vy/Math.hypot(vx,vy,vz))));
+
+  rally++;
+  pulse(p.mesh);
+  if(act.smash) showToast('💥 스매시!'+(b.smashSpeed>1.2?' 강타!':''), p.color);
+}
+
+// ===== 점수 가산 + 세트 판정 =====
+function addPoint(pl, n){
+  const other = pl===p1?p2:p1;
+  pl.score += n;
+  if(pl.score>=WIN_POINTS && (pl.score-other.score)>=2){
+    pl.games++;
+    showToast((pl===p1?'🔵 블루':'🔴 레드')+' 세트 승리! 🏆', pl.color);
+    p1.score=0; p2.score=0;
+    firstServer = firstServer===p1?p2:p1;   // 세트마다 첫 서버 교대
+  }
+}
+
+// ===== 실점 원인 → 사람이 읽는 피드백 =====
+function lossFeedback(loser, detail){
+  const who = loser===p1?'🔵 블루':'🔴 레드';
+  const msg = {
+    net:   '네트에 걸림 — 탄도가 너무 낮음(파워·각도 부족)',
+    short: '자기 코트에 떨어짐 — 너무 짧고 약하게 침',
+    out:   '코트 밖 아웃 — 너무 세거나 각이 큼',
+    passed:'수비 실패 — 상대 코스를 못 따라가 놓침',
+    miss:  '수비 실패 — 반응이 늦어 두 번 튐',
+  }[detail] || '실점';
+  const el=document.getElementById('fb');
+  if(el) el.textContent = '📋 패인: '+who+' — '+msg;
+}
+
+// ===== 랠리 종료 처리 =====
+function endRally(winner, loser, reason, detail){
+  if(b.over) return;
+  b.over=true;
+  recordEpisode(rally);
+  lossFeedback(loser, detail);
+
+  // 실제 탁구 스코어: 랠리당 1점 (스매시/수비는 통계로만)
+  let extraLearn=0;
+  const smashWinner = (reason==='winner' && b.isSmash && b.lastHitter===winner);
+  if(smashWinner){
+    // 콤보 보너스: 랠리 중 연속 스매시(rallySmashes)가 쌓일수록 더 큰 보상 → 몰아치는 공격 학습
+    const combo = Math.min(3, (b.rallySmashes||1)-1);
+    winner.smashWins++; extraLearn = 0.5 + 0.15*combo;
+    showToast((winner===p1?'🔵 블루':'🔴 레드')+' 💥 스매시 위너!'+(combo?' '+(combo+1)+'연타!':''), winner.color);
+  } else {
+    showToast((winner===p1?'🔵 블루':'🔴 레드')+' 득점 +1  ·  '+({fault:'상대 실책',winner:'위너샷'}[reason]||''), winner.color);
+  }
+  addPoint(winner, 1);
+
+  // 경쟁 학습 보상
+  if(reason==='fault' && loser.brain && b.pending && b.pending.brain===loser.brain){
+    learn(b.pending.brain, b.pending.key, b.pending.a, -1); loser.err++;
+  }
+  if(reason==='winner' && b.pending && b.pending.brain===winner.brain){
+    const place = b.pending.place||0;                          // 빈 코트로 잘 찔렀으면 추가 보상
+    learn(b.pending.brain, b.pending.key, b.pending.a, 0.9+extraLearn+0.5*place);
+  }
+  // ε 감소 (바닥 0.10 유지 → 항상 약간의 탐험으로 창의성 확보). 공유 뇌라 한 번만.
+  if(!epsLock) p1.brain.eps=Math.max(0.10,p1.brain.eps*0.997);   // 고정 시 자동감소 정지(사용자 조절 유지)
+
+  updateUI();
+  newPoint(currentServer()); // 실제 규칙에 따른 서브 로테이션
+}
+
+// ===== 물리 스텝 =====
+function step(){
+  if(b.over){ return; }
+  if(rally>RALLY_CAP){ b.over=true; recordEpisode(rally); newPoint(currentServer()); return; }
+  ballHist.push({x:b.x,y:b.y,z:b.z,vx:b.vx,vy:b.vy,vz:b.vz,canReturn:b.canReturn,spin:{x:b.spin.x,y:b.spin.y,z:b.spin.z}});
+  if(ballHist.length>60) ballHist.shift();
+  moveAI(p1); moveAI(p2);
+
+  const prevx=b.x;
+  b.vy-=GRAV;
+  // 마그누스 힘: a = MAGNUS·(ω × v) — 탑스핀은 아래로 꽂고, 사이드스핀은 휘게 함
+  b.vx+=MAGNUS*(b.spin.y*b.vz-b.spin.z*b.vy);
+  b.vy+=MAGNUS*(b.spin.z*b.vx-b.spin.x*b.vz);
+  b.vz+=MAGNUS*(b.spin.x*b.vy-b.spin.y*b.vx);
+  b.spin.x*=SPIN_DECAY; b.spin.y*=SPIN_DECAY; b.spin.z*=SPIN_DECAY;
+  b.x+=b.vx; b.y+=b.vy; b.z+=b.vz;
+
+  // 네트 충돌(관통 방지): 네트 높이 아래로 x=0을 지나면 실책
+  if(prevx*b.x<0 && Math.abs(b.z)<=halfW && b.y<NET_H){
+    b.x=0; b.y=Math.max(b.y,R);
+    const winner=b.lastHitter===p1?p2:p1;
+    showToast('🕸️ 네트! '+(winner===p1?'🔵':'🔴')+' 득점', winner.color);
+    endRally(winner, b.lastHitter, 'fault', 'net'); return;
+  }
+
+  // 테이블 바운스
+  if(b.y<R && b.vy<0 && Math.abs(b.x)<=halfL && Math.abs(b.z)<=halfW){
+    b.y=R; b.vy=-b.vy*REST;
+    const side=Math.sign(b.x)||1;
+    const hitterSide=b.lastHitter.side;
+    if(side===hitterSide){
+      // 서브의 자기 코트 첫 바운스는 합법
+      if(b.serve && !b.serveOwnBounced){ b.serveOwnBounced=true; }
+      else {
+        // 친 사람 코트에 떨어짐 = 네트/짧음 실책
+        const winner=b.lastHitter===p1?p2:p1;
+        endRally(winner, b.lastHitter, 'fault', 'short'); return;
+      }
+    } else {
+      b.serve=false;               // 리시버 코트 바운스 = 서브 완료, 랠리 시작
+      b.bounceOnExpect++;
+      if(b.bounceOnExpect===1){
+        b.canReturn=true;
+        // 인바운드 성공 보상 — 스매시(공격)는 더 크게(공격 장려) + 빈 코트로 잘 찌르면 가산(배치)
+        if(b.pending && !b.pending.based){ const base=b.pending.smash?0.35:0.1; learn(b.pending.brain,b.pending.key,b.pending.a, base+0.2*(b.pending.place||0)); b.pending.based=true;
+          const hb=b.lastHitter; if(hb.brain===b.pending.brain) hb.ok=(hb.ok||0)+1; }
+      } else if(b.bounceOnExpect>=2){
+        // 리시버가 못 받고 두 번 튐 = 위너
+        const receiver = b.expectSide>0? p2:p1;
+        const winner = b.lastHitter;
+        endRally(winner, receiver, 'winner', 'miss'); return;
+      }
+    }
+  }
+
+  // 리시버가 받을 차례 — 3D 리치 안(반드시 1바운스 후)
+  const rcv = b.expectSide>0? p2:p1;
+  if(b.canReturn && Math.hypot(b.x-rcv.cx, b.y-rcv.cy, b.z-rcv.cz) < REACH){
+    doReturn(rcv);
+  } else if((rcv.side>0)? b.x>HOMEX+2.2 : b.x<-(HOMEX+2.2)){
+    // 리시버를 지나쳐 감
+    if(b.bounceOnExpect>=1){ endRally(b.lastHitter, rcv, 'winner', 'passed'); }
+    else { const winner=b.lastHitter===p1?p2:p1; endRally(winner, b.lastHitter, 'fault', 'out'); }
+    return;
+  }
+
+  // 벗어남(측면) 또는 바닥 절반 높이까지 낙하 → 그 랠리 종료(패배)
+  if(Math.abs(b.x)>halfL+5 || Math.abs(b.z)>halfW+5 || b.y<HALF_FALL){
+    if(b.bounceOnExpect>=1){ endRally(b.lastHitter, rcv, 'winner', 'passed'); }
+    else { const winner=b.lastHitter===p1?p2:p1; endRally(winner,b.lastHitter,'fault', 'out'); }
+    return;
+  }
+
+  // 공 시각효과: 스매시면 타자 색으로 빛남 (크기는 그대로 유지)
+  if(b.isSmash){ const c=b.lastHitter.colorHex; ball.material.color.setHex(c); ball.material.emissive.setHex(c); }
+  else { ball.material.color.setHex(0xffffff); ball.material.emissive.setHex(0x222222); }
+  ball.scale.setScalar(1);
+  ball.position.set(b.x,b.y,b.z);
+}
+
+function pulse(m){ m.scale.set(1.25,1.25,1.25); setTimeout(()=>m.scale.set(1,1,1),90); }
+
+// 스매시 파티클 버스트
+let particles=[];
+function spawnBurst(colorHex){
+  if(particles.length>120) return;   // 폭주 방지 (빠른 시뮬레이션 시 누적 차단)
+  for(let i=0;i<10;i++){
+    const g=new THREE.Mesh(new THREE.SphereGeometry(0.12,6,6), new THREE.MeshBasicMaterial({color:colorHex}));
+    g.position.set(b.x,b.y,b.z);
+    g.vx=(Math.random()-0.5)*0.4; g.vy=Math.random()*0.3; g.vz=(Math.random()-0.5)*0.4; g.life=1;
+    scene.add(g); particles.push(g);
+  }
+}
+function updateParticles(){
+  for(let i=particles.length-1;i>=0;i--){ const g=particles[i];
+    g.position.x+=g.vx; g.position.y+=g.vy; g.position.z+=g.vz; g.vy-=0.02; g.life-=0.05;
+    g.material.opacity=Math.max(0,g.life); g.material.transparent=true; g.scale.setScalar(Math.max(0.1,g.life));
+    if(g.life<=0){ scene.remove(g); particles.splice(i,1); }
+  }
+}
+let toastEl=document.getElementById('toast'), toastTimer;
+function showToast(txt,color){ toastEl.textContent=txt; toastEl.style.color=color==='blue'?'#4fc3f7':'#ff7ab6'; toastEl.style.opacity=1; clearTimeout(toastTimer); toastTimer=setTimeout(()=>toastEl.style.opacity=0,700); }
+
+function updateUI(){
+  s1.textContent=p1.score; s2.textContent=p2.score;
+  g1.textContent=p1.games; g2.textContent=p2.games;
+  sm1.textContent=p1.smashWins; sv1.textContent=p1.saves; er1.textContent=p1.err;
+  sm2.textContent=p2.smashWins; sv2.textContent=p2.saves; er2.textContent=p2.err;
+  setn.textContent=p1.games+p2.games+1;
+  srv.textContent = (b && b.lastHitter && b.serve ? b.lastHitter : currentServer())===p1 ? '🔵' : '🔴';
+  lead.textContent = p1.score>p2.score ? '🔵 리드' : p2.score>p1.score ? '🔴 리드' : '동점';
+  ep.textContent=episodes;
+  eps.textContent=((p1.brain.eps+p2.brain.eps)/2).toFixed(2);
+  if(epsSlider){ epsSlider.value=p1.brain.eps; epsVal.textContent=p1.brain.eps.toFixed(2); }   // 자동감소 중에도 슬라이더 동기화
+  rallyEl.textContent=rally;
+  avg.textContent=recentAvg().toFixed(1);
+  drawSpark();
+}
+function drawSpark(){
+  const c=spark.getContext('2d'), W=spark.width, H=spark.height;
+  c.clearRect(0,0,W,H);
+  const n=rallyHist.length; if(n<2) return;
+  // 이동평균 곡선
+  const pts=[]; const win=10;
+  for(let i=0;i<n;i++){ let s=0,cnt=0; for(let j=Math.max(0,i-win);j<=i;j++){s+=rallyHist[j];cnt++;} pts.push(s/cnt); }
+  const mx=Math.max(4,...pts);
+  c.strokeStyle='#66bb6a'; c.lineWidth=2; c.beginPath();
+  pts.forEach((v,i)=>{ const x=i/(n-1)*W, y=H-(v/mx)*(H-4)-2; i?c.lineTo(x,y):c.moveTo(x,y); });
+  c.stroke();
+}
+
+// ===== 루프 =====
+function animate(){
+  requestAnimationFrame(animate);
+  if(running){ const nn=Math.round(speed); for(let i=0;i<nn;i++) step(); if(!b.over) updateUI(); }
+  if(b && b.spin){ const k=0.7; ball.rotation.z+=b.spin.z*k; ball.rotation.y+=b.spin.y*k; ball.rotation.x+=0.05+b.spin.x*k; }
+  else { ball.rotation.x+=0.2; ball.rotation.y+=0.15; }
+  updateParticles();
+  renderer.render(scene,camera);
+}
+
+// ===== DOM refs & boot =====
+let s1,s2,g1,g2,setn,lead,srv,sm1,sm2,sv1,sv2,er1,er2,ep,eps,rallyEl,avg,spark,fbEl;
+let epsSlider,epsVal,epsLockChk;
+function boot(){
+  if(typeof THREE==='undefined') return;
+  s1=document.getElementById('s1'); s2=document.getElementById('s2');
+  g1=document.getElementById('g1'); g2=document.getElementById('g2');
+  setn=document.getElementById('setn'); lead=document.getElementById('lead');
+  srv=document.getElementById('srv');
+  sm1=document.getElementById('sm1'); sm2=document.getElementById('sm2');
+  sv1=document.getElementById('sv1'); sv2=document.getElementById('sv2');
+  er1=document.getElementById('er1'); er2=document.getElementById('er2');
+  ep=document.getElementById('ep'); eps=document.getElementById('eps');
+  rallyEl=document.getElementById('rally'); avg=document.getElementById('avg');
+  spark=document.getElementById('spark'); fbEl=document.getElementById('fb');
+  init(); updateUI(); animate();
+  document.getElementById('startBtn').onclick=()=> running=!running;
+  document.getElementById('resetBtn').onclick=()=>{
+    running=false; p1.score=p2.score=0; p1.games=p2.games=0;
+    p1.saves=p2.saves=0; p1.smashWins=p2.smashWins=0; p1.err=p2.err=0; p1.ok=p2.ok=0;
+    p1.brain=makeBrain(); p2.brain=p1.brain;   // 공유 뇌로 초기화
+    episodes=0; rallyHist=[]; firstServer=p1; newPoint(currentServer()); updateUI();
+  };
+  document.querySelectorAll('[data-speed]').forEach(bt=> bt.onclick=()=> speed=parseFloat(bt.dataset.speed));
+  document.getElementById('camBtn').onclick=()=>{ camMode=(camMode+1)%3; setCamera(); };
+  // 탐험율(ε) 수동 조절: 슬라이더를 움직이면 즉시 반영 + 자동감소 고정
+  epsSlider=document.getElementById('epsSlider'); epsVal=document.getElementById('epsVal'); epsLockChk=document.getElementById('epsLockChk');
+  epsSlider.oninput=()=>{ const v=parseFloat(epsSlider.value); p1.brain.eps=v; p2.brain.eps=v;
+    epsLock=true; epsLockChk.checked=true; epsVal.textContent=v.toFixed(2); };
+  epsLockChk.onchange=()=>{ epsLock=epsLockChk.checked; };
+}
+addEventListener('load', boot);
+</script>
+</body>
+</html>
