@@ -91,10 +91,12 @@ const paddleX = halfL+1.2;      // 라켓은 테이블에서 떨어져 대기
 const HOMEX=paddleX;            // 라켓 기본(홈) x 위치 — 대기 시 베이스라인
 const HITX=HOMEX;               // 요격 라인(=베이스라인). 스텝인은 랠리를 무너뜨려 비활성
 const Y_HIT=1.3;               // 이상적 타구 높이
-const REACH=1.5;              // 라켓 3D 리치(구) — 넓힐수록 받아넘길 확률↑(랠리 지속)
+let REACH=1.6;              // 라켓 3D 리치(구) — 랠리 길이 조절(↑ 길어짐, 너무 크면 네트 실책이 지배)
+let APEXMAX=3.0;            // 리턴 아크 정점 상한(높이면 네트 실책↓, 대신 높은 루프 허용)
+let ZLIMF=0.72;             // 배치 폭(코트 반폭 대비): 넓히면 코너 공략↑ → miss/passed로 랠리 종결(네트 대신) — 넓힐수록 받아넘길 확률↑(랠리 지속)
 const PSPEED=0.52;            // (참조용) 기준 이동속도
-const PMAX=0.86;             // 라켓 최고 속도 (가속 상한) — 빠른 공도 따라잡아 랠리 유지
-const PACC=0.085;            // 라켓 가속도 — 멀리서 달려올수록 스윙이 빨라짐(운동량↑)
+let PMAX=0.95;             // 라켓 최고 속도 (가속 상한) — 빠른 공도 따라잡아 랠리 유지
+let PACC=0.10;            // 라켓 가속도 — 멀리서 달려올수록 스윙이 빨라짐(운동량↑)
 const MAGNUS=0.03;           // 마그누스 계수: 회전이 만드는 휘어짐/낙하
 const SPIN_DECAY=0.992;      // 회전 감쇠(매 스텝)
 const RALLY_CAP=80;          // 안전장치: 지나치게 긴 랠리는 무승부 리셋
@@ -390,32 +392,64 @@ function doReturn(p){
   let vz = hs*Math.sin(yaw);
 
   // ▶ 회전(스핀): 탑스핀은 공을 아래로 꽂고(마그누스), 조준(yaw) 방향으로 약한 사이드스핀
-  const topspin = act.top + Math.abs(randn())*0.1;
+  // 일반 리턴은 낮은 탑스핀(solver 탄도 정확 → 네트 실책↓), 스매시는 강한 탑스핀(네트 넘고 급강하)
+  const topspin = (act.smash ? 0.9 : 0.35*act.top) + Math.abs(randn())*0.05;
   // 사이드스핀: 마그누스 Δvz = -MAGNUS·spin.y·vx 이므로 sign(vx)를 곱해야 양 코트에서 대칭이 된다
   // (탑스핀의 z처럼) — 없으면 한쪽 선수의 샷만 바깥으로 휘어 승률이 한쪽으로 쏠림
   const side    = 0.2*Math.sign(vz)*Math.sign(vx)*Math.min(1,Math.abs(vz/(Math.abs(vx)+1e-4)));
   b.spin={ x:0, y:side, z:-topspin*Math.sign(vx) };
 
-  // ▶ 네트 통과 보장: 탑스핀의 하강력(마그누스)까지 반영한 유효 중력으로 최소 상승각 확보.
-  //   라켓은 x=±8.2에서 대기 → 공이 네트까지 먼 거리를 날아가므로 낮은 궤적은 네트에 걸림.
-  if(Math.abs(vx)>1e-4){
-    const gEff = GRAV + MAGNUS*Math.abs(b.spin.z*vx);   // 중력 + 탑스핀 하강력
-    const t = Math.abs(b.x)/Math.abs(vx);              // 네트 도달까지 스텝 수
-    const vyNeed = (NET_H + 0.45 - b.y)/t + 0.5*gEff*t; // 네트 위 여유를 넘길 최소 vy
-    if(vy < vyNeed) vy = vyNeed;
+  // ▶ 스매시 킬샷: 타점이 네트보다 충분히 높을 때, 아래로 강하게 내리꽂는다.
+  //   짧고 빠르게(작은 비행시간) + 강한 탑스핀 → 네트를 넘자마자 급강하. (타점이 낮으면 스킵 → 일반 궤적)
+  let smashKill=false;
+  if(act.smash && b.y > NET_H+0.30){
+    const xL = os*halfL*(0.42 + Math.abs(randn())*0.14);      // 네트 앞쪽에 짧게 꽂음
+    const spd = Math.min(1.5, 0.95 + 0.9*swing + 0.05*Math.max(0,b.rallySmashes-1)); // 강한 수평 속도
+    const dist = Math.abs(xL - b.x);
+    const T = Math.max(6, dist/spd);                          // 빠른 비행(작은 T)
+    const topK = 1.6;                                         // 킬샷 전용 강한 탑스핀(고정) → 급강하
+    const gE = GRAV + MAGNUS*topK*spd;                        // 탑스핀 하강 반영 유효중력
+    const vyS = (R - b.y + 0.5*gE*T*T)/T;                     // 착지(R)까지 필요한 vy: 타점 높고 T 작으면 음수(아래로 확)
+    const tN = Math.abs(b.x)/spd;                             // 네트 도달 스텝
+    const yNet = b.y + vyS*tN - 0.5*gE*tN*tN;                 // 네트 지점 높이
+    if(yNet > NET_H+0.06){                                    // 네트를 넘길 수 있으면 킬샷 확정
+      vx = (xL - b.x)/T;
+      vy = vyS;
+      vz = Math.max(-0.28, Math.min(0.28, vz));               // 좌우는 과하지 않게
+      b.spin = { x:0, y:0, z:-topK*Math.sign(vx) };           // 강한 탑스핀(급강하)
+      b.smashSpeed = spd;
+      smashKill = true;
+    }
   }
 
-  // ▶ 인바운드 보정: 이 타구가 상대 코트(테이블 위)에 떨어지도록 vx·vz를 다듬어
-  //   아웃/네트를 줄여 랠리를 지속시킨다. (승부는 '배치'로 상대를 흔들어 도달 못하게 하는 데서 남)
+  // (스매시는 강한 탑스핀을 유지해 네트를 넘은 뒤 급강하 — solver가 apex 내에서 네트를 보장)
+
+  // ▶ 인바운드 + 네트 통과 보장 (수렴 반복): 스매시 킬샷이면 건너뜀(이미 궤적 확정).
+  //   ⓐ 착지 깊이(wantX)에 맞춰 vx → ⓑ 그 vx에서 네트 통과에 필요한 만큼 vy 상향. 몇 번 반복해 수렴.
+  //   apex가 리시버 리치를 넘으면 상한에서 멈춤(로브 방지). 마지막에 vx를 vy에 맞춰 재계산 → 아웃 방지.
+  if(!smashKill)
   {
-    const disc = vy*vy + 2*GRAV*Math.max(0, b.y - R);
-    const tLand = (vy + Math.sqrt(Math.max(0,disc)))/GRAV || 1;   // 발사~착지 스텝(중력 근사)
-    const depth = (act.smash ? 0.82 : 0.55) + randn()*0.06;       // 스매시는 깊게, 일반은 안전 깊이
-    const wantX = os*halfL*Math.max(0.30, Math.min(0.92, depth)); // 상대 코트 30~92% 지점에 착지
-    vx = (wantX - b.x)/tLand;                                     // 목표 깊이에 정확히 떨어지도록 수평속도 재조정
-    const zLim = halfW*0.74;   // 배치 각을 안쪽으로 제한 → 상대가 따라잡을 여지를 남겨 랠리 지속
-    const zLand = b.z + vz*tLand;
-    if(Math.abs(zLand)>zLim) vz = (Math.sign(zLand)*zLim - b.z)/tLand;   // 코트 밖으로 나가면 사이드 각 축소
+    const landTime=(vy0)=>{ const disc=vy0*vy0+2*GRAV*Math.max(0,b.y-R); return (vy0+Math.sqrt(Math.max(0,disc)))/GRAV || 1; };
+    const depth=Math.max(0.45, Math.min(0.95, 0.66+randn()*0.07));  // 착지 깊이(상대 베이스라인 쪽). (킬샷은 여기 안 옴)
+    const wantX=os*halfL*depth;
+    const APEX_MAX=APEXMAX;                                    // 리시버가 닿을 수 있는 최대 타점 높이(높이면 네트↓)
+    for(let it=0; it<4; it++){
+      const tLand=landTime(vy);
+      vx=(wantX - b.x)/tLand;                                  // ⓐ wantX에 착지하도록 vx
+      if(Math.abs(vx)<1e-4) break;
+      const gEff=GRAV + MAGNUS*Math.abs((b.spin.z)*vx);
+      const tNet=Math.abs(b.x)/Math.abs(vx);                   // 네트 도달 스텝
+      const vyNeed=(NET_H+0.34 - b.y)/tNet + 0.5*gEff*tNet;    // ⓑ 네트 위 0.34 확보에 필요한 vy
+      const apexCapVy=Math.sqrt(Math.max(0, 2*gEff*(APEX_MAX-b.y)));
+      if(vyNeed>apexCapVy){ vy=apexCapVy; break; }             // 아크 상한 도달: 여기서 멈춤(넘기 어려우면 네트 감수)
+      if(vy>=vyNeed) break;                                    // 이미 네트를 넘김 → 수렴
+      vy=vyNeed;                                               // 부족하면 올리고 다시 반복
+    }
+    const tLand=landTime(vy);
+    vx=(wantX - b.x)/tLand;                                    // 최종 vx: vy에 맞춰 wantX 착지(아웃 방지)
+    const zLim=halfW*ZLIMF;   // 배치 폭(넓히면 코너 공략 → miss/passed 종결, 네트 의존↓)
+    const zLand=b.z + vz*tLand;
+    if(Math.abs(zLand)>zLim) vz=(Math.sign(zLand)*zLim - b.z)/tLand;
   }
 
   b.vx=vx; b.vy=vy; b.vz=vz;               // 접촉 지점(현재 공 위치)에서 발사
