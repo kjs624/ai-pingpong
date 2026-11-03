@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/", "destination": "/ai-pingpong-rl.html" }]
+}
