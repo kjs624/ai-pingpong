@@ -160,28 +160,29 @@
 
   <div id="evoMainPanel">
     <div class="ph"><b>🧬 자연 선택 진화</b></div>
-    <div class="ptitle">각 개체가 <b>전 세대 생존자</b>와 경기해 점수를 얻음 → 점수 상위 <b id="survPct">25%</b>만 살아남음 → 생존자를 <b>돌연변이</b>시켜 자식 세대를 만듦 → 반복</div>
+    <div class="ptitle">각 개체가 <b>🎾 볼 머신 테스트</b>(무작위로 날아오는 공을 연속으로 받아 넘기기, 성공할수록 빨라지고 넓어짐, 한 번 실패하면 끝)를 12번 → 점수 상위 <b id="survPct">25%</b>만 살아남음 → 생존자를 <b>돌연변이</b>시켜 자식 세대 → 반복</div>
     <div class="pbtns"><button id="evoRunBtn" class="primary">▶ 진화 시작</button><button id="evoResetBtn">↺ 처음부터</button></div>
     <div class="seg" id="survSeg"><button data-s="0.1">생존 10%</button><button data-s="0.25" class="on">생존 25%</button><button data-s="0.5">생존 50%</button></div>
     <div id="evoStatus" class="pnote" style="margin-top:4px"></div>
-    <div class="ptitle">세대별 적합도 (전 세대와 경기한 판당 점수)</div>
+    <div class="ptitle">세대별 볼 머신 테스트 점수 (평균. 점수 = 연속 성공한 공마다 그 공의 속도 배율 합)</div>
     <div class="legend"><span><span class="k kEV"></span>세대 최고 개체</span><span><span class="k kMean"></span>세대 평균</span></div>
     <div class="chartWrap">
-      <canvas id="evoFitCurve" aria-label="세대별 최고·평균 적합도"></canvas>
+      <canvas id="evoFitCurve" aria-label="세대별 볼 머신 테스트 최고·평균 점수"></canvas>
       <div id="evoFitTip"></div>
     </div>
     <table class="cmpgrid">
       <tbody>
         <tr><td>세대 · 경험</td><td id="eGen">–</td></tr>
-        <tr><td>최고 / 평균 적합도</td><td id="eFit">–</td></tr>
-        <tr><td>최고 개체의 전 세대 상대 승률</td><td id="eVsPrev">–</td></tr>
+        <tr><td>최고 / 평균 점수</td><td id="eFit">–</td></tr>
+        <tr><td>최고 개체 연속 받기 (평균 / 최고)</td><td id="eVsPrev">–</td></tr>
         <tr><td>최고 개체 vs 미학습 로봇 (받기 · 승률)</td><td id="eVsU">–</td></tr>
       </tbody>
     </table>
-    <div class="pbtns"><button id="evoDuelBtn">⚔️ 3D: 현재 세대 vs 전 세대</button></div>
+    <div class="pbtns"><button id="evoDuelBtn">🎾 3D: 최고 개체 볼 머신 테스트</button></div>
     <div class="pnote">
-      뇌 = 작은 신경망(관측 16 → 은닉 12 → 팔 3축·손목 2축). 한 세대 <b>24</b>개체, 각자 전 세대 생존자 2명과 12판씩. 적합도 = 강화학습과 같은 보상(받기·넘기기·랠리 보너스·승패)의 판당 합계.<br>
-      3D 화면: 🔵 블루 = 현재 세대 최고, 🔴 레드 = 전 세대 최고. 진화는 이 탭을 떠나도 계속 진행됩니다.
+      뇌 = 작은 신경망(관측 16 → 은닉 12 → 팔 3축·손목 2축). 한 세대 <b>24</b>개체, 각자 볼 머신 테스트 12번의 평균 점수로 선택.
+      처음엔 모두 0점이라 고를 수 없어서, 선택할 때만 마지막 공에 닿았거나 가까웠던 만큼 최대 +0.5를 더합니다(화면 점수에는 안 들어감).<br>
+      3D 화면: 🔵 블루 = 현재 세대 최고 개체, 🔴 레드 자리 = 볼 머신. 진화는 이 탭을 떠나도 계속 진행됩니다.
     </div>
   </div>
 
@@ -207,7 +208,7 @@
     <div id="h2h" class="pnote"></div>
     <div class="pnote">
       <b>🎓 강화학습</b>: 한 로봇(Q-테이블)이 셀프플레이로 매 판 보상을 받으며 바로바로 고쳐 나감(TD 학습).<br>
-      <b>🧬 진화</b>: 신경망 뇌 <b id="evoSize"></b>개가 한 세대. 전 세대 생존자와 경기해 점수 상위 25%만 살아남고, 돌연변이 자식으로 다음 세대를 만듦(경기 중엔 학습 안 함).<br>
+      <b>🧬 진화</b>: 신경망 뇌 <b id="evoSize"></b>개가 한 세대. 볼 머신 연속 받기 점수 상위 25%만 살아남고, 돌연변이 자식으로 다음 세대를 만듦(경기 중엔 학습 안 함). 진화의 경험 = 볼 머신이 쏜 공 수.<br>
       3D 화면: 🔵 블루 = 강화학습 로봇, 🔴 레드 = 진화 최고 개체. 평가는 둘 다 미학습 로봇과 100점(ε=0)으로 똑같이.
     </div>
   </div>
@@ -446,10 +447,14 @@ function faceAxes(p){
 
 // ===== 경기(환경): 물리 + 실제 탁구 규칙 + 두 로봇의 결정·학습 =====
 class Match {
-  constructor(brainBlue, brainRed, hooks){
+  // opt.drill: 🎾 볼 머신 테스트 — p1(블루)만 로봇, p2 자리는 공을 쏘는 볼 머신. {maxBalls, loop}
+  constructor(brainBlue, brainRed, hooks, opt){
     this.h=hooks||null;                       // 화면 효과 콜백(토스트·파티클). 헤드리스면 null
     this.p1=makePlayer(-1, brainBlue);
     this.p2=makePlayer( 1, brainRed);
+    const dr=opt&&opt.drill;
+    this.drill = dr ? {streak:0, score:0, balls:0, level:1, speed:0, done:false, maxBalls:dr.maxBalls||Infinity, loop:!!dr.loop,
+                       runs:0, best:0, bestScore:0, lastStreak:null, lastScore:null, lastShaping:0, minDist:Infinity, touchedBall:false} : null;
     this.firstServer=this.p1;                 // 이번 세트 첫 서버 (세트마다 교대)
     this.points=0; this.caps=0; this.voids=0; this.voidFlip=0; this.rally=0; this.rallyHist=[]; this.tick=0;
     this.hist=Array.from({length:HIST},()=>({x:0,y:0,z:0,vx:0,vy:0,vz:0,canReturn:false}));
@@ -468,7 +473,44 @@ class Match {
     return this.voidFlip ? (s===p1?p2:p1) : s;      // 무득점 판이 나올 때마다 서브 차례가 상대에게 넘어감
   }
   // ===== 포인트 시작(서브) — 서브 자체는 학습 대상 아님 =====
+  resetArms(){
+    for(const p of [this.p1,this.p2]){       // 팔을 홈 위치·정지 상태로
+      p.cx=p.side*HOMEX; p.cy=Y_HIT; p.cz=0; p.mvx=p.mvy=p.mvz=0;
+      p.cmd[0]=p.cmd[1]=p.cmd[2]=0; p.act=[2,2,2,2,2]; p.flight=false; p.swingPend=null;
+      p.wp=p.wy=p.tgtP=p.tgtW=0;
+    }
+  }
+  // 🎾 볼 머신이 다음 공을 쏨: 로봇 코트의 무작위 지점으로. 연속 성공할수록 빠르고(+8%씩, ±10% 무작위) 넓게(좌우·앞뒤 범위가 커짐)
+  launch(){
+    const d=this.drill, M=this.p2, P=this.p1;
+    d.level=1+0.08*d.streak;
+    d.speed=Math.min(1.1, 0.32*d.level*(0.9+0.2*rand()));             // 수평 속도
+    const spread=Math.min(1, 0.3+0.07*d.streak);                       // 처음엔 가운데 근처 → 연속할수록 코트 전체
+    const x0=M.side*(halfL+0.3), y0=0.9+0.6*rand(), z0=(rand()-0.5)*halfW*0.8*spread;
+    const xL=P.side*halfL*(0.55+(rand()-0.5)*0.5*spread), zL=(rand()-0.5)*2*halfW*0.75*spread;   // 로봇 코트 착지점
+    let T=Math.abs(xL-x0)/d.speed, vy=0;
+    for(let k=0;k<12;k++){                                              // 네트를 넘을 때까지 비행시간을 늘림
+      vy=(R-y0+0.5*GRAV*T*T)/T;
+      const tN=Math.abs(x0)/(Math.abs(xL-x0)/T), yN=y0+vy*tN-0.5*GRAV*tN*tN;
+      if(yN>NET_H+0.12) break; T*=1.1;
+    }
+    this.b={ x:x0, y:y0, z:z0, vx:(xL-x0)/T, vy, vz:(zL-z0)/T,
+      lastHitter:M, expectSide:P.side, bounceOnExpect:0, canReturn:false,
+      isSmash:false, rallySmashes:0, spin:{x:0,y:0,z:0}, serve:false, serveOwnBounced:true, over:false, touched:true, exchanges:0 };
+    this.hLen=0; d.balls++; this.rally=d.streak; d.minDist=Infinity; d.touchedBall=false;
+    this.emit('launch', d);
+  }
+  endDrill(reason){
+    const d=this.drill;
+    d.done=true; d.runs++; d.lastStreak=d.streak; d.lastScore=d.score;
+    // 진화 선택용 가산점(화면 점수에는 안 들어감): 마지막 공에 닿았으면 0.5, 아니면 라켓이 가까웠을수록 최대 0.5
+    d.lastShaping = d.touchedBall ? 0.5 : 0.5*Math.max(0, 1-d.minDist/3);
+    d.best=Math.max(d.best,d.streak); d.bestScore=Math.max(d.bestScore,d.score);
+    this.emit('drillEnd', d, reason);
+    if(d.loop){ d.streak=0; d.score=0; d.done=false; this.resetArms(); this.launch(); }   // 화면용: 다시 시작
+  }
   newPoint(server){
+    if(this.drill){ this.resetArms(); this.launch(); return; }
     const S=server.side;
     this.b={
       x:S*5, y:2.5, z:(rand()*3-1.5)*0.3,
@@ -480,11 +522,7 @@ class Match {
       exchanges:0                   // 이번 판에 공이 상대 코트에 들어간 횟수(랠리 보너스용)
     };
     this.hLen=0; this.rally=0; this.tick=0;
-    for(const p of [this.p1,this.p2]){       // 포인트마다 팔을 홈 위치·정지 상태로
-      p.cx=p.side*HOMEX; p.cy=Y_HIT; p.cz=0; p.mvx=p.mvy=p.mvz=0;
-      p.cmd[0]=p.cmd[1]=p.cmd[2]=0; p.act=[2,2,2,2,2]; p.flight=false; p.swingPend=null;
-      p.wp=p.wy=p.tgtP=p.tgtW=0;
-    }
+    this.resetArms();                         // 포인트마다 팔을 홈 위치·정지 상태로
   }
   pushHist(){
     const b=this.b, e=this.hist[this.hHead];
@@ -505,6 +543,7 @@ class Match {
 
   // ===== 🧠 결정 (every 스텝마다): 관측 → 직전 행동 TD 업데이트 → 축별 ε-greedy 새 행동 =====
   decide(p){
+    if(this.drill && p===this.p2) return;                   // 볼 머신 자리는 움직이지 않음
     const s=this.perceived(this.b.isSmash?REACT_FAST:REACT);
     const o=observe(p,s);
     p.obs=o;
@@ -622,6 +661,7 @@ class Match {
     const b=this.b;
     if(b.over) return;
     b.over=true;
+    if(this.drill){ this.endDrill(detail); return; }       // 🎾 연속이 끊김 → 테스트 종료(점수 기록)
     this.points++; this.rallyHist.push(this.rally); if(this.rallyHist.length>200) this.rallyHist.shift();
     if(reason==='winner') loser.misses++;                       // 받을 차례인데 못 받음
     if(!b.touched || detail==='block'){                         // 아무도 공을 못 건드림 / 튀기 전에 라켓에 맞음 → 무득점, 서브(턴)는 상대에게
@@ -647,7 +687,7 @@ class Match {
   step(){
     const b=this.b, p1=this.p1, p2=this.p2;
     if(b.over) return;
-    if(this.rally>RALLY_CAP){                                  // 너무 긴 랠리: 무승부 리셋(학습 업데이트 없이 버림)
+    if(!this.drill && this.rally>RALLY_CAP){                                  // 너무 긴 랠리: 무승부 리셋(학습 업데이트 없이 버림)
       b.over=true; this.points++; this.caps++; this.rallyHist.push(this.rally);
       this.settle(null, false); this.emit('cap'); this.newPoint(this.currentServer()); return;
     }
@@ -687,6 +727,12 @@ class Match {
       } else {
         b.serve=false;               // 리시버 코트 바운스 = 서브 완료, 랠리 시작
         b.bounceOnExpect++;
+        if(this.drill && b.lastHitter===p1 && b.bounceOnExpect===1){   // 🎾 받아서 넘김 성공 → 점수(그 공의 속도 배율) 쌓고 다음 공
+          const d=this.drill; d.streak++; d.score+=d.level; p1.overs++; p1.flight=false;
+          this.emit('drillHit', d);
+          if(d.streak>=d.maxBalls){ b.over=true; this.endDrill('max'); return; }
+          this.launch(); return;
+        }
         if(b.bounceOnExpect===1){
           b.canReturn=true;
           const h=b.lastHitter;
@@ -705,13 +751,15 @@ class Match {
 
     // 리시버가 받을 차례 — 3D 리치 안(반드시 1바운스 후)
     const rcv = b.expectSide>0? p2:p1;
+    const machine = this.drill && rcv===p2;
+    if(this.drill && rcv===p1){ const dd=Math.hypot(b.x-p1.cx,b.y-p1.cy,b.z-p1.cz); if(dd<this.drill.minDist) this.drill.minDist=dd; }                  // 볼 머신 쪽은 공을 치지 않음(넘긴 공은 바운드에서 판정)
     // ▶ 라켓 면 충돌: 이번 스텝 동안 공 표면이 라켓 면에 닿았는지(이동 경로로 판정 → 빠른 공도 건너뛰지 않음)
     const fa=faceAxes(rcv), n=fa.n, u=fa.u, w=fa.w;
     const q1x=b.x-rcv.cx, q1y=b.y-rcv.cy, q1z=b.z-rcv.cz;
     const d0=q0x*n[0]+q0y*n[1]+q0z*n[2], d1=q1x*n[0]+q1y*n[1]+q1z*n[2];   // 면에서 공 중심까지 거리(앞쪽 +)
     const touch=R+BLADE_T;
     let hitFace=false;
-    if(d1<=touch && d0>-touch){
+    if(!machine && d1<=touch && d0>-touch){
       const t=d0>d1 ? Math.max(0,Math.min(1,(d0-touch)/(d0-d1))) : 1;      // 닿는 순간
       const cx=q0x+(q1x-q0x)*t, cy=q0y+(q1y-q0y)*t, cz=q0z+(q1z-q0z)*t, dc=cx*n[0]+cy*n[1]+cz*n[2];
       const lu=cx*u[0]+cy*u[1]+cz*u[2], lw=cx*w[0]+cy*w[1]+cz*w[2];         // 면 위 좌표(세로·가로)
@@ -722,6 +770,7 @@ class Match {
       }
     }
     if(hitFace && b.canReturn){
+      if(this.drill) this.drill.touchedBall=true;
       this.doReturn(rcv);
     } else if(hitFace){
       // 내 코트에 튀기 전에 라켓에 닿음: 통과하지 않고 라켓에 막혀 튕김 → 오브스트럭션은 무득점(서브 교대)
@@ -836,32 +885,26 @@ function nnAct(p, o){
   const lv=(v,L)=>{ let bi=0; for(let i=1;i<L.length;i++) if(Math.abs(L[i]-v)<Math.abs(L[bi]-v)) bi=i; return bi; };   // 화면 표시용 가까운 단계
   p.act=[lv(0.95*out[0],VLEV), lv(0.95*out[1],VLEV), lv(0.95*out[2],VLEV), lv(0.5*out[3],WLEV), lv(0.5*out[4],WLEV)];
 }
-// 한 세대 진행 (자연 선택):
-//  ① 각 개체가 '전 세대 생존자'(첫 세대는 같은 세대의 다른 개체)와 경기 — 진영 반반
-//  ② 그 경기에서 얻은 판당 점수(보상 합계) = 적합도
-//  ③ 적합도 상위 survive 비율만 살아남음 → 다음 세대의 '전 세대 생존자'가 됨
+// 한 세대 진행 (자연 선택) — 평가 = 🎾 볼 머신 연속 받기 테스트
+//  ① 각 개체가 볼 머신 테스트를 trials번: 무작위로 날아오는 공을 받아 넘기면 다음 공(점점 빨라짐), 한 번이라도 실패하면 테스트 끝
+//  ② 점수 = 성공한 공마다 그 공의 속도 배율(1, 1.08, 1.16…)의 합 (연속 개수와 공 속도를 함께 반영)
+//     적합도 = 점수 + 마지막 공 가산점(닿음 0.5 / 가까웠던 만큼 최대 0.5)의 평균 — 처음엔 모두 0점이라 고를 수가 없어서 넣음
+//  ③ 적합도 상위 survive 비율만 살아남음
 //  ④ 생존자를 돌연변이시킨 자식으로 나머지 자리를 채움 → 반복
+const MACHINE=makeBrain(); MACHINE.frozen=true;   // 볼 머신 자리(움직이지 않음)
 class Evolution {
   constructor(opt){
     opt=opt||{};
-    this.size=opt.size||24; this.survive=opt.survive||0.25; this.opponents=opt.opponents||2; this.pointsPer=opt.pointsPer||12;
+    this.size=opt.size||24; this.survive=opt.survive||0.25; this.trials=opt.trials||12; this.maxBalls=opt.maxBalls||40;
     this.mutRate=opt.mutRate||0.15; this.sigma=opt.sigma||0.25;
-    this.pop=Array.from({length:this.size},()=>({w:randGenes(), fit:0, n:0, won:0, lost:0}));
-    this.prev=null;                 // 전 세대 생존자들의 유전자(이번 세대의 상대)
-    this.prevBest=null;             // 전 세대 최고 개체
+    this.pop=Array.from({length:this.size},()=>({w:randGenes(), fit:0, n:0, streak:0}));
     this.gen=0; this.points=0; this.best=null; this.bestFit=-Infinity; this.history=[];
     this.startGen();
   }
   startGen(){
-    this.pop.forEach(g=>{ g.fit=0; g.n=0; g.won=0; g.lost=0; });
-    this.sched=[];
-    this.pop.forEach((g,i)=>{ for(let k=0;k<this.opponents;k++){
-      let ow;
-      if(this.prev) ow=this.prev[(rand()*this.prev.length)|0];
-      else { let j=(rand()*(this.size-1))|0; if(j>=i) j++; ow=this.pop[j].w; }
-      this.sched.push({i, ow});
-    } });
-    this.si=0; this.phase=0; this.m=null;
+    this.pop.forEach(g=>{ g.fit=0; g.n=0; g.streak=0; g.streakSum=0; });
+    this.sched=[]; this.pop.forEach((g,i)=>{ for(let t=0;t<this.trials;t++) this.sched.push(i); });
+    this.si=0; this.m=null;
   }
   // 조금씩 실행(화면이 안 멈추게). 세대가 끝나면 true
   run(maxSteps){
@@ -869,15 +912,13 @@ class Evolution {
     while(s<maxSteps){
       if(!this.m){
         if(this.si>=this.sched.length){ this.nextGen(); return true; }
-        const e=this.sched[this.si], A=makeNNBrain(this.pop[e.i].w), B=makeNNBrain(e.ow);
-        this.m = this.phase===0 ? new Match(A,B) : new Match(B,A);
+        this.m=new Match(makeNNBrain(this.pop[this.sched[this.si]].w), MACHINE, null, {drill:{maxBalls:this.maxBalls}});
       }
       const m=this.m;
-      if(m.points>=this.pointsPer/2){
-        const g=this.pop[this.sched[this.si].i], me=this.phase===0?m.p1:m.p2, op=this.phase===0?m.p2:m.p1;
-        g.fit+=me.ret; g.n+=m.points; g.won+=me.pointsWon; g.lost+=op.pointsWon;
-        this.points+=m.points; this.m=null;
-        if(this.phase){ this.phase=0; this.si++; } else this.phase=1;
+      if(m.drill.done){
+        const g=this.pop[this.sched[this.si]], d=m.drill;
+        g.fit+=d.lastScore+d.lastShaping; g.n++; g.streak=Math.max(g.streak,d.lastStreak); g.streakSum+=d.lastStreak;
+        this.points+=d.balls; this.m=null; this.si++;
         continue;
       }
       m.step(); s++;
@@ -885,30 +926,27 @@ class Evolution {
     return false;
   }
   nextGen(){
-    const pop=this.pop; pop.forEach(g=>g.score=g.n? g.fit/g.n : -1e9);
+    const pop=this.pop; pop.forEach(g=>{ g.score=g.n? g.fit/g.n : 0; g.avgStreak=g.n? g.streakSum/g.n : 0; });
     pop.sort((a,b)=>b.score-a.score);
-    const k=Math.max(2, Math.round(this.size*this.survive));
-    const top=pop[0];
-    this.prevBest=this.best; this.best=top.w.slice(); this.bestFit=top.score;
+    const k=Math.max(2, Math.round(this.size*this.survive)), top=pop[0];
+    this.best=top.w.slice(); this.bestFit=top.score;
     this.history.push({gen:this.gen, points:this.points, best:top.score, mean:pop.reduce((a,g)=>a+g.score,0)/pop.length,
-      winVsPrev: (top.won+top.lost)? top.won/(top.won+top.lost) : null, survivors:k});
+      bestStreak:top.streak, bestAvgStreak:top.avgStreak, survivors:k});
     const surv=pop.slice(0,k).map(g=>g.w.slice());
-    this.prev=surv;                                              // 다음 세대는 이 생존자들과 경기
-    const next=surv.map(w=>({w:w.slice(), fit:0, n:0, won:0, lost:0}));   // 생존자는 그대로 다음 세대로
-    while(next.length<this.size){                                // 나머지는 생존자의 돌연변이 자식
-      const parent=surv[(rand()*k)|0], w=parent.slice();
+    const next=surv.map(w=>({w:w.slice(), fit:0, n:0, streak:0}));        // 생존자는 그대로 다음 세대로
+    while(next.length<this.size){                                          // 나머지는 생존자의 돌연변이 자식
+      const w=surv[(rand()*k)|0].slice();
       for(let i=0;i<NN_SIZE;i++) if(rand()<this.mutRate) w[i]+=randn()*this.sigma;
-      next.push({w, fit:0, n:0, won:0, lost:0});
+      next.push({w, fit:0, n:0, streak:0});
     }
     this.pop=next; this.gen++; this.startGen();
   }
   bestBrain(){ return makeNNBrain((this.best||this.pop[0].w).slice()); }
-  prevBestBrain(){ return makeNNBrain((this.prevBest||this.pop[1%this.size].w).slice()); }
 }
 
 function stateCounts(brain){ const c={}; AXES.forEach(ax=>c[ax]=Object.keys(brain.q[ax]||{}).length); return c; }
 
-root.PongRL={ Match, EvalJob, Evolution, makeNNBrain, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
+root.PongRL={ Match, EvalJob, Evolution, MACHINE, makeNNBrain, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
   D:{TL,TW,NET_H,halfL,halfW,R,FLOOR_Y,HOMEX,ARM_BASE_X,WIN_POINTS,RALLY_CAP,REACT,REACT_FAST,BLADE_W,BLADE_H,BLADE_T,HANDLE_L,HANDLE_W,HANDLE_D},
   setRandom(f){ rand=f; } };
 })(typeof window!=='undefined'?window:globalThis);
@@ -916,7 +954,7 @@ root.PongRL={ Match, EvalJob, Evolution, makeNNBrain, makeBrain, cloneBrain, eva
 <script>
 window.addEventListener('load', ()=>{ if(typeof THREE==='undefined'){ document.body.innerHTML='<div style="padding:40px;color:#fff">Three.js CDN 로드 실패 — 인터넷 연결 후 다시 열어주세요.</div>'; }});
 
-const { Match, EvalJob, Evolution, makeNNBrain, makeBrain, cloneBrain, stateCounts, CFG, ACT_NAMES, D } = PongRL;
+const { Match, EvalJob, Evolution, MACHINE, makeNNBrain, makeBrain, cloneBrain, stateCounts, CFG, ACT_NAMES, D } = PongRL;
 const { TL, TW, NET_H, halfL, halfW, R, FLOOR_Y, ARM_BASE_X, REACT, BLADE_W, BLADE_H, BLADE_T, HANDLE_L, HANDLE_W, HANDLE_D } = D;
 
 // ===== 학습/검증 상태 =====
@@ -1095,9 +1133,9 @@ function layout(){
 function setMode(m){
   mode=m;
   if(m==='evoMain'){
-    // 🧬 진화 탭: 블루 = 현재 세대 최고, 레드 = 전 세대 최고
+    // 🧬 진화 탭: 블루 = 현재 세대 최고 개체가 🎾 볼 머신 테스트(실패하면 점수 남기고 다시 시작)
     duelMain={gen:evoMain.gen};
-    game=new Match(evoMain.bestBrain(), evoMain.prevBestBrain(), hooks);
+    game=new Match(evoMain.bestBrain(), MACHINE, hooks, {drill:{loop:true}});
   } else if(m==='evo'){
     // 🧬 비교 화면: 블루 = 비교용 강화학습 로봇(복사본, ε=0), 레드 = 진화 최고 개체
     duelInfo={rl:cmpBrain.episodes, gen:evo.gen};
@@ -1115,7 +1153,7 @@ function setMode(m){
 }
 function nameOf(p){
   if(mode==='evo') return p===game.p1?'🎓 강화학습 로봇':'🧬 진화 로봇';
-  if(mode==='evoMain') return p===game.p1?'🧬 현재 세대':'🧬 전 세대';
+  if(mode==='evoMain') return p===game.p1?'🧬 최고 개체':'🎾 볼 머신';
   if(mode==='verify') return p===game.p1?'🎓 학습 로봇':'🐣 미학습 로봇';
   return p===game.p1?'🔵 블루':'🔴 레드';
 }
@@ -1125,6 +1163,9 @@ const hooks={
   smash:p=>spawnBurst(p.colorHex),
   toast:(txt,color)=>showToast(txt,color),
   set:p=>showToast(nameOf(p)+' 세트 승리! 🏆', p.color),
+  drillHit:d=>{ showToast('🎾 연속 '+d.streak+'개! (속도 ×'+d.level.toFixed(2)+')', 'blue'); uiDirty=true; },
+  drillEnd:(d,reason)=>{ showToast('🎾 테스트 종료 · 연속 '+d.lastStreak+'개 · 점수 '+d.lastScore.toFixed(1), 'red');
+    fbEl.textContent='📋 볼 머신 테스트 종료('+({net:'네트',out:'아웃',short:'짧음',passed:'못 받음',miss:'두 번 튐',block:'튀기 전 맞음',max:'최대 개수'}[reason]||reason)+') — 연속 '+d.lastStreak+'개 · 점수 '+d.lastScore.toFixed(1)+' · 최고 연속 '+d.best+'개'; uiDirty=true; },
   void:(rcv,info)=>{
     const next=game.currentServer();   // 다음 판의 서버(이미 교대 반영됨)
     const why=info&&info.detail==='block' ? '튀기 전에 라켓에 맞음(오브스트럭션)' : '아무도 못 건드림';
@@ -1197,7 +1238,7 @@ function updateUI(){
   sm1.textContent=p1.smashWins; sv1.textContent=p1.saves; er1.textContent=p1.err; rt1.textContent=pct(p1.hits,p1.hits+p1.misses); ov1.textContent=pct(p1.overs,p1.hits);
   sm2.textContent=p2.smashWins; sv2.textContent=p2.saves; er2.textContent=p2.err; rt2.textContent=pct(p2.hits,p2.hits+p2.misses); ov2.textContent=pct(p2.overs,p2.hits);
   n1.textContent = mode==='evoMain' ? '🧬 '+duelMain.gen+'세대 최고' : mode==='evo' ? '🎓 강화학습('+duelInfo.rl+'판)' : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
-  n2.textContent = mode==='evoMain' ? (duelMain.gen>0? (duelMain.gen-1)+'세대 최고 🧬' : '같은 세대 🧬') : mode==='evo' ? '진화 '+duelInfo.gen+'세대 🧬' : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
+  n2.textContent = mode==='evoMain' ? '볼 머신 🎾' : mode==='evo' ? '진화 '+duelInfo.gen+'세대 🧬' : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
   setn.textContent=p1.games+p2.games+1;
   const b=game.b;
   srv.textContent = (b.serve ? b.lastHitter : game.currentServer())===p1 ? '🔵' : '🔴';
@@ -1207,9 +1248,10 @@ function updateUI(){
   epsSlider.value=brain.eps; epsVal.textContent=brain.eps.toFixed(2); epsLockChk.checked=brain.epsLock;   // 자동감소 중에도 동기화
   rallyEl.textContent=game.rally;
   avg.textContent=recentAvg().toFixed(1);
-  if(mode==='evoMain'){
-    const n=p1.pointsWon+p2.pointsWon;
-    modeRow.innerHTML='🧬 현재 세대 vs 전 세대 · 현재 세대 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점)';
+  if(mode==='evoMain' && game.drill){
+    const d=game.drill;
+    s1.textContent=d.streak; s2.textContent=d.best;   // 왼쪽 = 지금 연속, 오른쪽 = 최고 연속
+    modeRow.innerHTML='🎾 볼 머신 테스트 · 연속 <b>'+d.streak+'</b>개 · 공 속도 ×'+d.level.toFixed(2)+' · 점수 '+d.score.toFixed(1)+' · 최고 연속 <b>'+d.best+'</b>개 ('+d.runs+'회 시도)';
   } else if(mode==='evo'){
     const n=p1.pointsWon+p2.pointsWon;
     modeRow.innerHTML='🧬 진화 vs 🎓 강화학습 대결 · 🎓 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점)';
@@ -1504,9 +1546,9 @@ function updateEvoRunBtn(){ const b=document.getElementById('evoRunBtn'); if(b) 
 function renderEvoMainStats(){
   if(!evoMain) return;
   const h=evoMain.history.at(-1), lastU=[...evoMain.history].reverse().find(x=>x.vsU);
-  eGen.textContent=evoMain.gen+'세대 · '+evoMain.points+'판';
-  eFit.textContent=h? h.best.toFixed(0)+' / '+h.mean.toFixed(0) : '–';
-  eVsPrev.textContent=h && h.winVsPrev!=null ? pctR(h.winVsPrev)+(h.gen===0?' (첫 세대: 같은 세대 상대)':'') : '–';
+  eGen.textContent=evoMain.gen+'세대 · 공 '+evoMain.points+'개';
+  eFit.textContent=h? h.best.toFixed(1)+' / '+h.mean.toFixed(1) : '–';
+  eVsPrev.textContent=h ? h.bestAvgStreak.toFixed(1)+'개 / '+h.bestStreak+'개' : '–';
   eVsU.textContent=lastU? pctR(lastU.vsU.retA)+' · '+pctR(lastU.vsU.winRateA)+' ('+lastU.gen+'세대)' : '–';
   const done=evoMain.si/evoMain.sched.length;
   evoStatus.textContent=(evoMainRun?'진화 중… ':'정지됨 · ')+evoMain.gen+'세대 평가 '+Math.round(100*done)+'% · 생존 '+Math.round(100*evoMain.survive)+'% ('+Math.max(2,Math.round(evoMain.size*evoMain.survive))+'/'+evoMain.size+'개체)';
@@ -1516,7 +1558,7 @@ const C_MEAN='#8a9bbd';
 function fitGeom(){
   const cv=fitCanvas, W=cv.clientWidth||300, H=cv.clientHeight||150, L=40, Rp=36, T=10, B=20, pw=W-L-Rp, ph=H-T-B;
   const hs=evoMain? evoMain.history : [];
-  let lo=Math.min(0,...hs.map(h=>h.mean)), hi=Math.max(10,...hs.map(h=>h.best)); const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
+  let lo=Math.min(0,...hs.map(h=>h.mean)), hi=Math.max(2,...hs.map(h=>h.best)); const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
   const maxG=Math.max(10, hs.length? hs.at(-1).gen : 0);
   return {W,H,L,T,pw,ph,maxG,lo,hi, X:g=>L+g/maxG*pw, Y:v=>T+(1-(v-lo)/(hi-lo))*ph};
 }
@@ -1525,9 +1567,10 @@ function drawFitCurve(){
   const g=fitGeom(), dpr=Math.min(devicePixelRatio||1,2), hs=evoMain.history;
   if(cv.width!==Math.round(g.W*dpr) || cv.height!==Math.round(g.H*dpr)){ cv.width=Math.round(g.W*dpr); cv.height=Math.round(g.H*dpr); }
   const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,g.W,g.H);
-  const ticks=[g.lo, 0, g.hi].filter((v,i,a)=>a.indexOf(v)===i && v>=g.lo && v<=g.hi);
+  const ticks=[g.lo, 0, g.hi].filter((v,i,a)=>a.indexOf(v)===i && v>=g.lo && v<=g.hi)
+    .filter((v,i,a)=> v===0 || a.every(u=>u===v || Math.abs(g.Y(u)-g.Y(v))>14));   // 너무 가까운 눈금은 생략
   c.lineWidth=1; c.font='10px "Segoe UI","Malgun Gothic",sans-serif'; c.textAlign='right'; c.textBaseline='middle';
-  ticks.forEach(v=>{ const y=Math.round(g.Y(v))+0.5; c.strokeStyle=v===0?C_BASE:C_GRID; c.beginPath(); c.moveTo(g.L,y); c.lineTo(g.L+g.pw,y); c.stroke(); c.fillStyle=C_MUTED; c.fillText(Math.round(v), g.L-5, y); });
+  ticks.forEach(v=>{ const y=Math.round(g.Y(v))+0.5; c.strokeStyle=v===0?C_BASE:C_GRID; c.beginPath(); c.moveTo(g.L,y); c.lineTo(g.L+g.pw,y); c.stroke(); c.fillStyle=C_MUTED; c.fillText(Math.abs(v)<10?v.toFixed(1):Math.round(v), g.L-5, y); });
   c.textBaseline='top'; c.textAlign='left'; c.fillText('0세대', g.L, g.T+g.ph+5); c.textAlign='right'; c.fillText(g.maxG+'세대', g.L+g.pw, g.T+g.ph+5);
   if(!hs.length){ c.textAlign='center'; c.textBaseline='middle'; c.fillText('▶ 진화 시작을 누르면 세대마다 점이 찍힙니다', g.L+g.pw/2, g.T+g.ph/2); return; }
   const labels=[];
@@ -1536,7 +1579,7 @@ function drawFitCurve(){
     hs.forEach((h,i)=>{ const x=g.X(h.gen), y=g.Y(h[k]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
     const l=hs.at(-1), x=g.X(l.gen), y=g.Y(l[k]);
     c.fillStyle=C_SURF; c.beginPath(); c.arc(x,y,6,0,7); c.fill(); c.fillStyle=col; c.beginPath(); c.arc(x,y,4,0,7); c.fill();
-    labels.push({x,y,t:Math.round(l[k])});
+    labels.push({x,y,t:l[k].toFixed(1)});
   });
   if(Math.abs(labels[0].y-labels[1].y)<12){ const up=labels[0].y<=labels[1].y?0:1; labels[up].y-=7; labels[1-up].y+=7; }
   c.fillStyle=C_TEXT; c.font='600 11px "Segoe UI","Malgun Gothic",sans-serif'; c.textAlign='left'; c.textBaseline='middle';
@@ -1552,10 +1595,9 @@ function setupFitHover(){
     fitHover=h.gen; drawFitCurve();
     tip.textContent='';
     const line=t=>{ const d=document.createElement('div'); d.innerHTML=t; tip.appendChild(d); };
-    line('<b>'+h.gen+'세대</b> · 경험 '+h.points+'판');
-    line('<span class="k kEV"></span><b>'+h.best.toFixed(0)+'</b> 최고 적합도');
-    line('<span class="k kMean"></span><b>'+h.mean.toFixed(0)+'</b> 평균 적합도');
-    if(h.winVsPrev!=null) line('최고 개체 전 세대 상대 승률 '+pctR(h.winVsPrev));
+    line('<b>'+h.gen+'세대</b> · 공 '+h.points+'개');
+    line('<span class="k kEV"></span><b>'+h.best.toFixed(1)+'</b> 최고 개체 점수 (연속 평균 '+h.bestAvgStreak.toFixed(1)+' · 최고 '+h.bestStreak+')');
+    line('<span class="k kMean"></span><b>'+h.mean.toFixed(1)+'</b> 세대 평균 점수');
     if(h.vsU) line('미학습 상대 받기 '+pctR(h.vsU.retA));
     tip.style.display='block';
     const x=g.X(h.gen), tw=tip.offsetWidth;
