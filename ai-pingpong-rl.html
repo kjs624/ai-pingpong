@@ -199,17 +199,21 @@ const R=0.15, GRAV=0.015, REST=0.7;
 const TABLE_TOP=0;              // 테이블 상면 y
 const FLOOR_Y=-6;                        // 바닥 y
 const HALF_FALL=(FLOOR_Y+TABLE_TOP)/2;   // 바닥~상면의 절반(-3): 공이 여기까지 떨어지면 그 랠리 패배
-const PADDLE_MINY=0.95;        // 탁구대 위에서 라켓 중심의 최소 높이(라켓 면 반지름 0.85 + 여유)
+// ===== 라켓 실제 크기 (탁구대 2.74m = 14 → 1m ≈ 5.11) =====
+// 면 15.0cm(가로) × 15.8cm(세로) 타원, 두께(러버 포함) 약 1.6cm, 손잡이 길이 10cm · 폭 2.5cm · 두께 2.3cm
+const M_UNIT=TL/2.74;
+const BLADE_W=0.075*M_UNIT, BLADE_H=0.079*M_UNIT, BLADE_T=0.008*M_UNIT;   // 면 반폭·반높이·반두께
+const HANDLE_L=0.10*M_UNIT, HANDLE_W=0.025*M_UNIT, HANDLE_D=0.023*M_UNIT;
+const PADDLE_MINY=BLADE_H+0.06;  // 탁구대 위에서 라켓 중심의 최소 높이(면 반높이 + 여유)
 // 라켓이 탁구대를 뚫지 않도록, 라켓 중심이 못 들어가는 '탁구대 + 라켓 크기' 영역(바닥~PADDLE_MINY)
-const TABLE_MX=halfL+0.8;      // 앞뒤: 라켓 두께 + 손목 각도로 기울어진 면
-const TABLE_MZ=halfW+0.85;     // 좌우: 라켓 면 반지름
+const TABLE_MX=halfL+0.4;      // 앞뒤: 라켓 두께 + 손목 각도로 기울어진 면
+const TABLE_MZ=halfW+BLADE_W+0.05;   // 좌우: 라켓 면 반폭
 const HOMEX=halfL+1.2;          // 라켓 기본(홈) x 위치 — 대기 시 베이스라인
 const Y_HIT=1.3;               // 시작 높이
 // 로봇팔 작업 공간(라켓이 갈 수 있는 범위): 앞뒤는 네트에서 4.5~11.2, 위아래 R~3.6, 좌우 벽 ±6.4
 const XMIN=halfL-2.5, XMAX=HOMEX+3, YMAX=3.6, ZWALL=halfW+2.5;
 const ARM_BASE_X=halfL+5.2;     // 로봇팔 받침대 위치(|x|) — 화면 표시용
-let FACE_R=1.0;             // 공이 맞는 라켓 면 반지름(라켓 0.85 + 공 0.15). 면에 실제로 닿아야 맞음
-const FACE_T=0.075;         // 라켓 면 두께의 절반
+
 let PMAX=0.95;             // 축별 최고 속도
 let PACC=0.10;            // 축별 가속도 한계 — 관성이 있어서 미리 출발하고 제때 멈춰야 함
 const MAGNUS=0.03;           // 마그누스 계수: 회전이 만드는 휘어짐/낙하
@@ -329,10 +333,10 @@ function makePlayer(side, brain){
 }
 
 const HIST=16;   // 센서 지연용 공 궤적 기록(링버퍼)
-// 라켓 면의 법선(상대 쪽을 향함): 화면의 라켓 회전(손목 각도 포함)과 같은 식
-function faceNormal(p){
-  const tz=0.15+p.wp, ty=(p.side<0?0:Math.PI)-p.wy;
-  return [Math.cos(tz)*Math.cos(ty), Math.sin(tz), -Math.cos(tz)*Math.sin(ty)];
+// 라켓 면의 방향: n = 법선(상대 쪽), u = 면의 세로축(손잡이 쪽), w = 면의 가로축. 화면의 라켓 회전(손목 각도 포함)과 같은 식
+function faceAxes(p){
+  const tz=0.15+p.wp, ty=(p.side<0?0:Math.PI)-p.wy, cz=Math.cos(tz), sz=Math.sin(tz), cy=Math.cos(ty), sy=Math.sin(ty);
+  return { n:[cz*cy, sz, -cz*sy], u:[-sz*cy, cz, sz*sy], w:[sy, 0, cy] };
 }
 
 // ===== 경기(환경): 물리 + 실제 탁구 규칙 + 두 로봇의 결정·학습 =====
@@ -571,18 +575,19 @@ class Match {
     // 리시버가 받을 차례 — 3D 리치 안(반드시 1바운스 후)
     const rcv = b.expectSide>0? p2:p1;
     // ▶ 라켓 면 충돌: 이번 스텝 동안 공 표면이 라켓 면에 닿았는지(이동 경로로 판정 → 빠른 공도 건너뛰지 않음)
-    const n=faceNormal(rcv);
+    const fa=faceAxes(rcv), n=fa.n, u=fa.u, w=fa.w;
     const q1x=b.x-rcv.cx, q1y=b.y-rcv.cy, q1z=b.z-rcv.cz;
     const d0=q0x*n[0]+q0y*n[1]+q0z*n[2], d1=q1x*n[0]+q1y*n[1]+q1z*n[2];   // 면에서 공 중심까지 거리(앞쪽 +)
-    const touch=R+FACE_T;
+    const touch=R+BLADE_T;
     let hitFace=false;
     if(d1<=touch && d0>-touch){
       const t=d0>d1 ? Math.max(0,Math.min(1,(d0-touch)/(d0-d1))) : 1;      // 닿는 순간
       const cx=q0x+(q1x-q0x)*t, cy=q0y+(q1y-q0y)*t, cz=q0z+(q1z-q0z)*t, dc=cx*n[0]+cy*n[1]+cz*n[2];
-      if(Math.hypot(cx-dc*n[0], cy-dc*n[1], cz-dc*n[2]) <= FACE_R){
-        hitFace=true;
-        const lx=cx-dc*n[0], ly=cy-dc*n[1], lz=cz-dc*n[2];                 // 공을 면 위(닿은 자리)에 놓음 → 겹쳐 보이지 않음
-        b.x=rcv.cx+lx+n[0]*touch; b.y=rcv.cy+ly+n[1]*touch; b.z=rcv.cz+lz+n[2]*touch;
+      const lu=cx*u[0]+cy*u[1]+cz*u[2], lw=cx*w[0]+cy*w[1]+cz*w[2];         // 면 위 좌표(세로·가로)
+      const eu=lu/(BLADE_H+R), ew=lw/(BLADE_W+R);
+      if(eu*eu+ew*ew <= 1){                                                 // 타원 모양 라켓 면(+공 반지름) 안
+        hitFace=true;                                                       // 공을 면 위(닿은 자리)에 놓음 → 겹쳐 보이지 않음
+        b.x=rcv.cx+lu*u[0]+lw*w[0]+n[0]*touch; b.y=rcv.cy+lu*u[1]+lw*w[1]+n[1]*touch; b.z=rcv.cz+lu*u[2]+lw*w[2]+n[2]*touch;
       }
     }
     if(hitFace && b.canReturn){
@@ -611,22 +616,43 @@ class Match {
 
 // ===== 🔬 헤드리스 평가: 두 뇌를 복사해 '학습 정지 + 탐험 없음(ε=0)'으로 대결 =====
 // 진영 편향을 없애려고 절반은 A=블루, 절반은 A=레드. 무승부(랠리 상한)·무득점 판은 집계에서 제외.
-function evaluate(brainA, brainB, nPoints){
-  const A=cloneBrain(brainA,{frozen:true,eps:0}), B=cloneBrain(brainB,{frozen:true,eps:0});
-  const r={n:0, aWins:0, bWins:0, aHits:0, aMiss:0, aOver:0, bHits:0, bMiss:0, bOver:0, rallySum:0, rallyN:0, caps:0, voids:0};
-  for(let half=0; half<2; half++){
-    const m = half===0 ? new Match(A,B) : new Match(B,A);
-    const pa = half===0 ? m.p1 : m.p2, pb = half===0 ? m.p2 : m.p1;
-    const target = half===0 ? Math.ceil(nPoints/2) : Math.floor(nPoints/2);
-    let guard=0;
-    while(m.points-m.caps-m.voids<target && guard++<target*40000) m.step();
+// 무득점 판까지 합친 판 수에는 상한(maxTotal, 기본 nPoints×15)이 있음: 둘 다 공을 거의 못 받으면 결정된 점수가 적게 나옴(n으로 표시).
+// 화면이 멈추지 않도록 run(최대 스텝)으로 조금씩 나눠 실행할 수 있다.
+class EvalJob {
+  constructor(brainA, brainB, nPoints, maxTotal){
+    this.A=cloneBrain(brainA,{frozen:true,eps:0}); this.B=cloneBrain(brainB,{frozen:true,eps:0});
+    this.targets=[Math.ceil(nPoints/2), Math.floor(nPoints/2)];
+    this.maxHalf=Math.ceil((maxTotal||nPoints*15)/2);
+    this.r={n:0, aWins:0, bWins:0, aHits:0, aMiss:0, aOver:0, bHits:0, bMiss:0, bOver:0, rallySum:0, rallyN:0, caps:0, voids:0};
+    this.half=-1; this.m=null; this.done=false; this.next();
+  }
+  next(){
+    if(this.m) this.collect();
+    this.half++;
+    if(this.half>=2){ this.finish(); return; }
+    this.m = this.half===0 ? new Match(this.A,this.B) : new Match(this.B,this.A);   // A=블루 → A=레드
+    this.guard=0;
+  }
+  run(maxSteps){
+    let s=0;
+    while(!this.done && s<maxSteps){
+      const m=this.m, t=this.targets[this.half];
+      if(m.points-m.caps-m.voids>=t || m.points>=this.maxHalf || this.guard>(t+1)*40000){ this.next(); continue; }
+      m.step(); s++; this.guard++;
+    }
+    return this.done;
+  }
+  collect(){
+    const m=this.m, r=this.r, pa=this.half===0?m.p1:m.p2, pb=this.half===0?m.p2:m.p1;
     r.aWins+=pa.pointsWon; r.bWins+=pb.pointsWon;
     r.aHits+=pa.hits; r.aMiss+=pa.misses; r.aOver+=pa.overs;
     r.bHits+=pb.hits; r.bMiss+=pb.misses; r.bOver+=pb.overs;
     for(const x of m.rallyHist){ r.rallySum+=x; r.rallyN++; }
     r.caps+=m.caps; r.voids+=m.voids;
   }
-  r.n=r.aWins+r.bWins;
+  finish(){
+    const r=this.r; this.done=true;
+    r.n=r.aWins+r.bWins;
   r.winRateA=r.n? r.aWins/r.n : 0.5;
   r.retA=r.aHits/Math.max(1,r.aHits+r.aMiss);       // 받기 성공률 = 받아낸 공 / 받아야 했던 공
   r.retB=r.bHits/Math.max(1,r.bHits+r.bMiss);
@@ -634,8 +660,9 @@ function evaluate(brainA, brainB, nPoints){
   r.overB=r.bOver/Math.max(1,r.bHits);
   r.avgRally=r.rallySum/Math.max(1,r.rallyN);
   r.z=(r.aWins-r.n/2)/Math.sqrt(Math.max(1,r.n)/4);  // 50%(실력 같음)에서 표준오차 몇 배 벗어났나
-  return r;
+  }
 }
+function evaluate(brainA, brainB, nPoints, maxTotal){ const j=new EvalJob(brainA,brainB,nPoints,maxTotal); j.run(Infinity); return j.r; }
 // ===== 셀프플레이 학습(헤드리스): 한 뇌가 블루·레드 양쪽을 맡아 nPoints 포인트 =====
 function trainSelfPlay(brain, nPoints, match){
   if(brain.frozen) return match;
@@ -646,16 +673,16 @@ function trainSelfPlay(brain, nPoints, match){
 }
 function stateCounts(brain){ const c={}; AXES.forEach(ax=>c[ax]=Object.keys(brain.q[ax]||{}).length); return c; }
 
-root.PongRL={ Match, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
-  D:{TL,TW,NET_H,halfL,halfW,R,FLOOR_Y,HOMEX,ARM_BASE_X,WIN_POINTS,RALLY_CAP,REACT,REACT_FAST},
+root.PongRL={ Match, EvalJob, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
+  D:{TL,TW,NET_H,halfL,halfW,R,FLOOR_Y,HOMEX,ARM_BASE_X,WIN_POINTS,RALLY_CAP,REACT,REACT_FAST,BLADE_W,BLADE_H,BLADE_T,HANDLE_L,HANDLE_W,HANDLE_D},
   setRandom(f){ rand=f; } };
 })(typeof window!=='undefined'?window:globalThis);
 </script>
 <script>
 window.addEventListener('load', ()=>{ if(typeof THREE==='undefined'){ document.body.innerHTML='<div style="padding:40px;color:#fff">Three.js CDN 로드 실패 — 인터넷 연결 후 다시 열어주세요.</div>'; }});
 
-const { Match, makeBrain, cloneBrain, evaluate, stateCounts, CFG, ACT_NAMES, D } = PongRL;
-const { TL, TW, NET_H, halfL, halfW, R, FLOOR_Y, ARM_BASE_X, REACT } = D;
+const { Match, EvalJob, makeBrain, cloneBrain, stateCounts, CFG, ACT_NAMES, D } = PongRL;
+const { TL, TW, NET_H, halfL, halfW, R, FLOOR_Y, ARM_BASE_X, REACT, BLADE_W, BLADE_H, BLADE_T, HANDLE_L, HANDLE_W, HANDLE_D } = D;
 
 // ===== 학습/검증 상태 =====
 let brain = makeBrain();          // 🎓 학습하는 뇌 — 셀프플레이: 블루·레드 로봇이 이 하나를 공유(경험 2배)
@@ -667,7 +694,7 @@ let curve = [];                   // 학습 곡선: {ep, win, retT, retU, overT,
 let nextEvalAt = 0;
 const EVAL_POINTS = 100;          // 체크포인트마다 미학습 AI와 100점 평가
 let fast = null;                  // ⚡ 빠른 학습 진행 {m, end, start}
-let uiDirty = true;
+let uiDirty = true, lastUI = 0;
 
 let scene,camera,renderer, table,net,ball, arm1,arm2, sun;
 let shadowsOn=true;   // 그림자 켜기/끄기 (브라우저에 기억)
@@ -685,7 +712,7 @@ function init(){
   scene.fog=new THREE.Fog(0x070b16,28,60);
   camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight,0.1,200); setCamera();
   renderer=new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));   // 고해상도 화면에서 렉 줄이기
   renderer.shadowMap.enabled=true; document.body.appendChild(renderer.domElement);
   renderer.domElement.style.cursor='grab';
   renderer.domElement.addEventListener('mousedown',()=>renderer.domElement.style.cursor='grabbing');
@@ -724,10 +751,12 @@ function init(){
 }
 function makePaddle(color){
   const g=new THREE.Group();
-  const blade=new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.15,24), new THREE.MeshStandardMaterial({color,roughness:0.4}));
+  // 실제 크기: 면 15.0×15.8cm 타원, 두께 약 1.6cm (원기둥을 눌러서 타원 면으로)
+  const blade=new THREE.Mesh(new THREE.CylinderGeometry(1,1,1,32), new THREE.MeshStandardMaterial({color,roughness:0.4}));
+  blade.scale.set(BLADE_H, 2*BLADE_T, BLADE_W);
   blade.rotation.z=Math.PI/2; blade.castShadow=true; g.add(blade);
   // 손잡이: 라켓 면 가장자리에서 위로 뻗음(로봇 손목이 끝을 잡음) → 라켓을 낮게 내려도 손잡이가 탁구대를 뚫지 않음
-  const h=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.9,0.35), new THREE.MeshStandardMaterial({color:0x8a5a2b})); h.position.y=0.85+0.45; h.castShadow=true; g.add(h);
+  const h=new THREE.Mesh(new THREE.BoxGeometry(HANDLE_D,HANDLE_L,HANDLE_W), new THREE.MeshStandardMaterial({color:0x8a5a2b})); h.position.y=BLADE_H+HANDLE_L/2; h.castShadow=true; g.add(h);
   return g;
 }
 // ===== 🤖 로봇팔: 받침대 + 기둥 + 어깨·팔꿈치·손목 관절 + 라켓. 팔 끝(라켓) 위치에 맞춰 2관절 IK로 자세 계산 =====
@@ -742,8 +771,8 @@ function makeArm(color, side){
     shoulder:m(new THREE.SphereGeometry(0.62,22,16), accent),
     upper:m(new THREE.CylinderGeometry(0.26,0.34,1,14), metal),
     elbow:m(new THREE.SphereGeometry(0.42,18,12), accent),
-    fore:m(new THREE.CylinderGeometry(0.18,0.25,1,14), metal),
-    wrist:m(new THREE.SphereGeometry(0.28,14,10), accent),
+    fore:m(new THREE.CylinderGeometry(0.1,0.2,1,14), metal),
+    wrist:m(new THREE.SphereGeometry(0.12,14,10), accent),
     paddle:makePaddle(color) };
   scene.add(a.paddle);
   const bx=side*ARM_BASE_X;
@@ -765,7 +794,7 @@ function poseArm(a, p){
   // 손목 각도(학습된 행동) 그대로: 좌우(wy)는 라켓 면 방향, 위아래(wp)는 면 열림
   a.paddle.rotation.set(0, (a.side<0?0:Math.PI) - p.wy, 0.15+p.wp);
   a.paddle.updateMatrixWorld();
-  _W.set(0,0.85+0.9+0.2,0); a.paddle.localToWorld(_W);    // 손목: 손잡이 끝(위)
+  _W.set(0,BLADE_H+HANDLE_L+0.08,0); a.paddle.localToWorld(_W);   // 손목: 손잡이 끝(위)
   const S=a.S; _d.subVectors(_W,S); const dist=_d.length();
   const dd=Math.min(ARM_L1+ARM_L2-0.01, Math.max(0.05,dist)); _d.multiplyScalar(1/Math.max(1e-6,dist));
   const k=(ARM_L1*ARM_L1-ARM_L2*ARM_L2+dd*dd)/(2*dd), h=Math.sqrt(Math.max(0,ARM_L1*ARM_L1-k*k));
@@ -949,10 +978,27 @@ function drawSpark(){
 }
 
 // ===== 📈 학습 검증: 체크포인트 평가 → 학습 곡선 =====
+// 평가는 화면이 멈추지 않도록 작업(EvalJob)으로 만들어 매 프레임 조금씩 실행(runJobs)
+let evalJobs=[], benchJob=null;
 function evaluateNow(){
-  const r=evaluate(brain, UNTRAINED, EVAL_POINTS);
-  curve.push({ep:brain.episodes, win:r.winRateA, retT:r.retA, retU:r.retB, overT:r.overA, overU:r.overB, n:r.n, z:r.z});
-  renderPanel();
+  if(evalJobs.length>=8) return;   // 안전장치: 평가가 아주 많이 밀리면 건너뜀
+  evalJobs.push({ep:brain.episodes, job:new EvalJob(brain, UNTRAINED, EVAL_POINTS)});   // 지금 뇌를 복사해서 평가
+}
+function runJobs(budgetMs){
+  const t0=performance.now();
+  while(performance.now()-t0<budgetMs){
+    if(evalJobs.length){
+      const e=evalJobs[0];
+      if(e.job.run(400)){
+        evalJobs.shift(); const r=e.job.r;
+        curve.push({ep:e.ep, win:r.winRateA, retT:r.retA, retU:r.retB, overT:r.overA, overU:r.overB, n:r.n, z:r.z});
+        curve.sort((a,b)=>a.ep-b.ep);
+        renderPanel();
+      }
+    } else if(benchJob){
+      if(benchJob.a.run(400) && benchJob.c.run(400)){ showBench(benchJob); benchJob=null; }
+    } else return;
+  }
 }
 function maybeEvaluate(){
   if(brain.episodes<nextEvalAt) return;
@@ -1057,12 +1103,13 @@ function startFast(n){
 function runFast(budgetMs){
   const t0=performance.now();
   while(fast && performance.now()-t0<budgetMs){
+    if(evalJobs.length>=2) break;                // 체크포인트 평가가 밀리면 끝날 때까지 기다림(곡선에 빈 구간이 안 생기게)
     const stopAt=Math.min(fast.end, nextEvalAt);   // 체크포인트에서 정확히 멈춰 평가
     for(let i=0;i<400 && brain.episodes<stopAt;i++) fast.m.step();
     maybeEvaluate();
     if(brain.episodes>=fast.end){
-      const last=curve[curve.length-1];
-      if(!last || last.ep!==brain.episodes) evaluateNow();          // 끝난 시점도 평가
+      const done=curve.some(c=>c.ep===brain.episodes) || evalJobs.some(e=>e.ep===brain.episodes);
+      if(!done) evaluateNow();                                       // 끝난 시점도 평가(이미 했으면 생략)
       fastProg.textContent='⚡ 완료: '+(fast.end-fast.start)+'판 학습 (총 '+brain.episodes+'판)'; fast=null; return;
     }
   }
@@ -1070,23 +1117,27 @@ function runFast(budgetMs){
 }
 // 🔬 지금 검증: 학습 AI vs 미학습 AI + 대조군(미학습 vs 미학습)을 각 200점
 function runBench(){
+  if(benchJob) return;
   const N=200;
-  const a=evaluate(brain, UNTRAINED, N);
-  const c=evaluate(makeBrain(), makeBrain(), N);
+  benchJob={N, ep:brain.episodes, a:new EvalJob(brain, UNTRAINED, N), c:new EvalJob(makeBrain(), makeBrain(), N)};
+  benchEl.textContent='🔬 검증 중… (화면은 계속 움직입니다)';
+}
+function showBench(j){
+  const N=j.N, a=j.a.r, c=j.c.r;
   const rows=[
     ['🎓 학습 vs 🐣 미학습', a],
     ['🐣 vs 🐣 (대조군)', c],
   ];
   const t=document.createElement('table'); t.className='ptable';
-  t.innerHTML='<thead><tr><th>대결 ('+N+'점, ε=0)</th><th>앞쪽 승률</th><th>받기</th><th>넘기기</th></tr></thead>';
+  t.innerHTML='<thead><tr><th>대결 (최대 '+N+'점, ε=0)</th><th>앞쪽 승률</th><th>받기</th><th>넘기기</th></tr></thead>';
   const tb=document.createElement('tbody');
   rows.forEach(([label,r])=>{ const tr=document.createElement('tr');
-    [label, Math.round(100*r.winRateA)+'%', Math.round(100*r.retA)+'% / '+Math.round(100*r.retB)+'%', Math.round(100*r.overA)+'% / '+Math.round(100*r.overB)+'%'].forEach(v=>{ const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
+    [label+' · '+r.n+'점', Math.round(100*r.winRateA)+'%', Math.round(100*r.retA)+'% / '+Math.round(100*r.retB)+'%', Math.round(100*r.overA)+'% / '+Math.round(100*r.overB)+'%'].forEach(v=>{ const td=document.createElement('td'); td.textContent=v; tr.appendChild(td); });
     tb.appendChild(tr); });
   t.appendChild(tb);
   const v=verdictOf({win:a.winRateA, z:a.z});
   const p=document.createElement('div'); p.className='pnote'; p.style.marginTop='4px';
-  p.textContent='학습 '+brain.episodes+'판 시점 · '+v.text+' · 대조군은 50% 근처여야 공정한 측정';
+  p.textContent='학습 '+j.ep+'판 시점 · '+v.text+' · 대조군은 50% 근처여야 공정한 측정(공을 거의 못 받아 무득점이 많으면 결정된 점수가 적음)';
   benchEl.textContent=''; benchEl.appendChild(t); benchEl.appendChild(p);
 }
 
@@ -1129,10 +1180,11 @@ function animate(){
     }
     uiDirty=true;
   }
-  if(fast){ runFast(14); uiDirty=true; }
+  if(fast){ runFast(10); uiDirty=true; }
   maybeEvaluate();
+  runJobs(running||fast ? 6 : 14);                           // 평가는 프레임마다 조금씩(경기 중엔 6ms)
   syncScene();
-  if(uiDirty){ updateUI(); uiDirty=false; }
+  if(uiDirty && (!running || t0-lastUI>100)){ updateUI(); uiDirty=false; lastUI=t0; }   // 화면 숫자는 0.1초마다
   const b=game.b;
   if(b && b.spin){ const k=0.7; ball.rotation.z+=b.spin.z*k; ball.rotation.y+=b.spin.y*k; ball.rotation.x+=0.05+b.spin.x*k; }
   else { ball.rotation.x+=0.2; ball.rotation.y+=0.15; }
@@ -1160,7 +1212,7 @@ function boot(){
   $('startBtn').onclick=()=> running=!running;
   $('resetBtn').onclick=()=>{
     running=false; fast=null; fastProg.textContent=''; benchEl.textContent='';
-    brain=makeBrain(); curve=[]; nextEvalAt=0;   // 새 빈 뇌로 처음부터
+    brain=makeBrain(); curve=[]; nextEvalAt=0; evalJobs=[]; benchJob=null;   // 새 빈 뇌로 처음부터
     setMode(mode); maybeEvaluate();
   };
   $('modeTrain').onclick=()=>setMode('train');
