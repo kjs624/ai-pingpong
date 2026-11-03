@@ -148,7 +148,7 @@
       </details>
       <div class="pnote">
         확인 방법: ① <b>⚡ 빠른 학습</b> → 곡선이 50%에서 위로 오르는지 ② <b>⚔️ 학습 로봇 vs 미학습 로봇</b>으로 실제 경기를 눈으로 ③ <b>🔬 지금 검증</b>으로 대조군(50%)과 비교<br>
-        보상: 받으면 <b id="pHit"></b> · 넘기면 <b id="pOver"></b> · 이기면 <b id="pWin"></b> · 지면 <b id="pLose"></b> · 아무도 못 건드린 판은 <b>무득점 + 서브 교대</b><br>
+        보상: 받으면 <b id="pHit"></b> · 넘기면 <b id="pOver"></b> · 이기면 <b id="pWin"></b> · 지면 <b id="pLose"></b> · 랠리 보너스 <b id="pRally"></b> · 아무도 못 건드린 판은 <b>무득점 + 서브 교대</b><br>
         평가 = 학습 로봇을 복사해 <b>학습 정지·탐험 없음(ε=0)</b>으로 미학습 로봇과 <b>100점</b>(진영 반반 교대) 대결. 실력이 같으면 50%가 정상입니다.<br>
         축별 Q-러닝 TD(0) · α=<b id="pAlpha"></b> · γ=<b id="pGamma"></b> · Q-테이블 상태 수: x <b id="nX">0</b> / y <b id="nY">0</b> / z <b id="nZ">0</b> / 손목 <b id="nP">0</b>·<b id="nW">0</b> · 평균 |TD오차| <b id="tdErr">–</b>
       </div>
@@ -234,6 +234,9 @@ const CFG={
   rOver:+75,         // 보상: 공을 넘기면(네트를 넘어 상대 코트에 들어감) — 랠리를 이어 가는 보상
   rWin:+80,          // 보상: 포인트를 이기면
   rLose:-80,         // 보상: 포인트를 지면
+  // 랠리 보너스: 이번 판에서 공이 상대 코트에 들어갈 때마다(주고받기 k번째) 보너스 = 30 × 1.5^(k−1), 최대 150
+  //   → 길게 이어 갈수록 보상이 커져서, 상대가 받을 수 있게 치고 랠리를 이어 가는 법을 배움
+  rallyBase:30, rallyGrow:1.5, rallyMax:150,   // 10·최대 60은 너무 작아 '공을 아예 안 건드리는' 쪽으로 무너지는 시드가 많았음(실측)
   // 받기·넘기기를 승패보다 너무 작게(예: 1·5) 하면 승패 잡음에 묻혀 '받기'를 못 배우는 시드가 많음(실측)
 };
 
@@ -371,7 +374,8 @@ class Match {
       lastHitter:server, expectSide:-S, bounceOnExpect:0, canReturn:false,
       isSmash:false, rallySmashes:0, spin:{x:0,y:0,z:0},
       serve:true, serveOwnBounced:false, over:false,
-      touched:false                 // 이번 판에 로봇이 공을 한 번이라도 건드렸나(무득점 판정)
+      touched:false,                // 이번 판에 로봇이 공을 한 번이라도 건드렸나(무득점 판정)
+      exchanges:0                   // 이번 판에 공이 상대 코트에 들어간 횟수(랠리 보너스용)
     };
     this.hLen=0; this.rally=0; this.tick=0;
     for(const p of [this.p1,this.p2]){       // 포인트마다 팔을 홈 위치·정지 상태로
@@ -573,7 +577,8 @@ class Match {
           const h=b.lastHitter;
           if(h.flight){                                                 // 내 타구가 상대 코트에 들어감 = 넘김 성공
             h.flight=false; h.overs++;
-            if(h.pend) h.pend.r+=CFG.rOver;                             // 보상: 넘김 (그 공을 친 스윙의 몫)
+            const bonus=Math.min(CFG.rallyMax, CFG.rallyBase*Math.pow(CFG.rallyGrow, b.exchanges)); b.exchanges++;
+            if(h.pend) h.pend.r+=CFG.rOver+bonus;                       // 보상: 넘김 + 랠리 보너스 (그 공을 친 스윙의 몫)
           }
         } else if(b.bounceOnExpect>=2){                                 // 리시버가 못 받고 두 번 튐 = 위너
           const receiver = b.expectSide>0? p2:p1;
@@ -1217,7 +1222,7 @@ function boot(){
   curveCanvas=$('curve'); tWin=$('tWin'); tWinSub=$('tWinSub'); tRetT=$('tRetT'); tRetU=$('tRetU'); tOvT=$('tOvT'); tOvU=$('tOvU');
   verdictEl=$('verdict'); fastProg=$('fastProg'); benchEl=$('bench'); nX=$('nX'); nY=$('nY'); nZ=$('nZ'); nP=$('nP'); nW=$('nW'); tdErr=$('tdErr'); obsHead=$('obsHead'); obsBody=document.querySelector('#obsTable tbody');
   $('pAlpha').textContent=CFG.alpha; $('pGamma').textContent=CFG.gamma;
-  $('pHit').textContent='+'+CFG.rHit; $('pOver').textContent='+'+CFG.rOver; $('pWin').textContent='+'+CFG.rWin; $('pLose').textContent=CFG.rLose;
+  $('pHit').textContent='+'+CFG.rHit; $('pOver').textContent='+'+CFG.rOver; $('pWin').textContent='+'+CFG.rWin; $('pLose').textContent=CFG.rLose; $('pRally').textContent='+'+CFG.rallyBase+'부터 주고받을 때마다 ×'+CFG.rallyGrow+'(최대 '+CFG.rallyMax+')';
   init(); setupCurveHover(); maybeEvaluate(); updateUI(); animate();
   $('startBtn').onclick=()=> running=!running;
   $('resetBtn').onclick=()=>{
