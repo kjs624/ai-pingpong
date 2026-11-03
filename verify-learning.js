@@ -65,7 +65,7 @@ for (const mark of marks) {
     pct(r.retA), pct(r.retB), pct(r.overA), pct(r.overB), self.avgRally.toFixed(1).padStart(5));
 }
 const sc = RL.stateCounts(brain);
-console.log('  (Q-테이블 상태 수: x %d · y %d · z %d, TD 업데이트 %d회)', sc.x, sc.y, sc.z, brain.updates);
+console.log('  (Q-테이블 상태 수: x %d · y %d · z %d · 손목 위아래 %d · 손목 좌우 %d, TD 업데이트 %d회)', sc.x, sc.y, sc.z, sc.p, sc.w, brain.updates);
 
 // 3) 최종 판정
 const fin = RL.evaluate(brain, UNTRAINED, FINAL_POINTS);
