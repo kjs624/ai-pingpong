@@ -79,15 +79,23 @@
   .pnote { margin-top:8px; color:#6b7fa5; font-size:10.5px; line-height:1.5; }
   .pnote b { color:#9fb0d0; }
   /* ===== 왼쪽 위 버튼 · 🧬 진화 비교 화면 · 버튼 숨기기 ===== */
-  #topLeft { position:fixed; top:12px; left:12px; z-index:13; display:flex; gap:6px; flex-direction:column; align-items:flex-start; }
-  #topLeft button { padding:7px 12px; font-size:13px; background:rgba(20,34,58,0.92); border:1px solid rgba(255,255,255,0.15); }
-  #topLeft button.on { background:#ffd54f; color:#1a1400; font-weight:700; }
-  #evoPanel { display:none; position:fixed; top:150px; right:12px; width:340px; z-index:11; background:rgba(10,16,30,0.9); backdrop-filter:blur(8px);
+  /* 왼쪽 위: [진화][강화][비교] 탭 + 그 아래 숨기기 */
+  #topLeft { position:fixed; top:12px; left:12px; z-index:13; display:flex; gap:4px; flex-direction:column; align-items:flex-start; }
+  #tabs { display:flex; gap:8px; }
+  #tabs button { padding:8px 16px; font-size:14px; font-weight:600; background:rgba(20,34,58,0.92); border:2px solid rgba(255,255,255,0.25); }
+  #tabs button.on { background:#ffd54f; color:#1a1400; border-color:#ffd54f; }
+  #hideBtn { background:none; border:none; padding:2px 4px; font-size:12px; color:#9fb0d0; text-decoration:underline; }
+  #hideBtn:hover { background:none; color:#e8eefc; }
+  #evoPanel, #evoMainPanel { display:none; position:fixed; top:150px; right:12px; width:340px; z-index:11; background:rgba(10,16,30,0.9); backdrop-filter:blur(8px);
               border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:10px 12px; font-size:12px; color:#e8eefc; overflow:auto; }
-  #evoPanel .ph { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  #evoPanel .ph b { font-size:14px; }
-  #evoPanel button { padding:6px 10px; font-size:12px; white-space:nowrap; }
-  #evoPanel .seg { margin-top:6px; }
+  #evoPanel .ph, #evoMainPanel .ph { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  #evoPanel .ph b, #evoMainPanel .ph b { font-size:14px; }
+  #evoPanel button, #evoMainPanel button { padding:6px 10px; font-size:12px; white-space:nowrap; }
+  #evoPanel .seg, #evoMainPanel .seg { margin-top:6px; }
+  #evoFitCurve { width:100%; height:150px; display:block; background:#0b1222; border-radius:8px; touch-action:none; }
+  #evoFitTip { position:absolute; pointer-events:none; display:none; background:#e8eefc; color:#0b1222; border-radius:6px; padding:5px 8px; font-size:11px; line-height:1.4; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.45); }
+  #evoFitTip .k { display:inline-block; width:12px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; }
+  .kMean { background:#8a9bbd; }
   .cmpgrid th { white-space:nowrap; }
   #evoCurve { width:100%; height:150px; display:block; background:#0b1222; border-radius:8px; touch-action:none; }
   #evoTip { position:absolute; pointer-events:none; display:none; background:#e8eefc; color:#0b1222; border-radius:6px; padding:5px 8px; font-size:11px; line-height:1.4; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.45); }
@@ -98,13 +106,16 @@
   .cmpgrid th { color:#9fb0d0; font-weight:600; text-align:right; padding:3px 4px; border-bottom:1px solid #1e2a40; }
   .cmpgrid td { text-align:right; padding:3px 4px; border-bottom:1px solid #1e2a40; white-space:nowrap; }
   .cmpgrid td:first-child, .cmpgrid th:first-child { text-align:left; }
-  body.evo #panel { display:none; }
-  body.evo #evoPanel { display:block; }
-  body.evo #resetBtn, body.evo #epsGroup { display:none; }
-  body.hideui #controls, body.hideui #hint, body.hideui #panel, body.hideui #evoPanel { display:none !important; }
+  body.scr-cmp #panel, body.scr-evo #panel { display:none; }
+  body.scr-cmp #evoPanel { display:block; }
+  body.scr-evo #evoMainPanel { display:block; }
+  body.scr-cmp #resetBtn, body.scr-cmp #epsGroup, body.scr-evo #resetBtn, body.scr-evo #epsGroup { display:none; }
+  body.hideui #controls, body.hideui #hint, body.hideui #panel, body.hideui #evoPanel, body.hideui #evoMainPanel { display:none !important; }
   @media (max-width:760px){
-    #topLeft { top:auto; bottom:8px; left:8px; flex-direction:row; }
-    #evoPanel { left:8px; right:8px; width:auto; }
+    #topLeft { top:6px; left:8px; flex-direction:row; align-items:center; gap:8px; }
+    #tabs { gap:4px; }
+    #tabs button { padding:5px 9px; font-size:12px; }
+    #evoPanel, #evoMainPanel { left:8px; right:8px; width:auto; }
     #ui { gap:6px; padding:6px; }
     .card { min-width:0; flex:1 1 40%; padding:6px 10px; }
     .center { order:3; flex:1 1 100%; min-width:0; padding:6px 10px; }   /* 블루·레드 카드 한 줄, 가운데 카드는 아래 */
@@ -143,12 +154,39 @@
   <div id="toast"></div>
 
   <div id="topLeft">
-    <button id="evoBtn">🧬 진화 vs 강화학습</button>
-    <button id="hideBtn" title="단축키 H">🙈 버튼 숨기기</button>
+    <div id="tabs"><button data-scr="evo">🧬 진화</button><button data-scr="rl" class="on">🎓 강화</button><button data-scr="cmp">⚖️ 비교</button></div>
+    <button id="hideBtn" title="단축키 H">숨기기</button>
+  </div>
+
+  <div id="evoMainPanel">
+    <div class="ph"><b>🧬 자연 선택 진화</b></div>
+    <div class="ptitle">각 개체가 <b>전 세대 생존자</b>와 경기해 점수를 얻음 → 점수 상위 <b id="survPct">25%</b>만 살아남음 → 생존자를 <b>돌연변이</b>시켜 자식 세대를 만듦 → 반복</div>
+    <div class="pbtns"><button id="evoRunBtn" class="primary">▶ 진화 시작</button><button id="evoResetBtn">↺ 처음부터</button></div>
+    <div class="seg" id="survSeg"><button data-s="0.1">생존 10%</button><button data-s="0.25" class="on">생존 25%</button><button data-s="0.5">생존 50%</button></div>
+    <div id="evoStatus" class="pnote" style="margin-top:4px"></div>
+    <div class="ptitle">세대별 적합도 (전 세대와 경기한 판당 점수)</div>
+    <div class="legend"><span><span class="k kEV"></span>세대 최고 개체</span><span><span class="k kMean"></span>세대 평균</span></div>
+    <div class="chartWrap">
+      <canvas id="evoFitCurve" aria-label="세대별 최고·평균 적합도"></canvas>
+      <div id="evoFitTip"></div>
+    </div>
+    <table class="cmpgrid">
+      <tbody>
+        <tr><td>세대 · 경험</td><td id="eGen">–</td></tr>
+        <tr><td>최고 / 평균 적합도</td><td id="eFit">–</td></tr>
+        <tr><td>최고 개체의 전 세대 상대 승률</td><td id="eVsPrev">–</td></tr>
+        <tr><td>최고 개체 vs 미학습 로봇 (받기 · 승률)</td><td id="eVsU">–</td></tr>
+      </tbody>
+    </table>
+    <div class="pbtns"><button id="evoDuelBtn">⚔️ 3D: 현재 세대 vs 전 세대</button></div>
+    <div class="pnote">
+      뇌 = 작은 신경망(관측 16 → 은닉 12 → 팔 3축·손목 2축). 한 세대 <b>24</b>개체, 각자 전 세대 생존자 2명과 12판씩. 적합도 = 강화학습과 같은 보상(받기·넘기기·랠리 보너스·승패)의 판당 합계.<br>
+      3D 화면: 🔵 블루 = 현재 세대 최고, 🔴 레드 = 전 세대 최고. 진화는 이 탭을 떠나도 계속 진행됩니다.
+    </div>
   </div>
 
   <div id="evoPanel">
-    <div class="ph"><b>🧬 진화 vs 🎓 강화학습</b><button id="evoBack">← 돌아가기</button></div>
+    <div class="ph"><b>⚖️ 진화 vs 강화학습 비교</b></div>
     <div class="ptitle">같은 경험(친 판 수)을 주고 어느 쪽이 더 빨리 배우는지 비교합니다. 평가는 둘 다 미학습 로봇과 100점</div>
     <div class="pbtns"><button id="cmpRunBtn" class="primary">▶ 비교 학습 시작</button><button id="cmpResetBtn">↺ 처음부터</button></div>
     <div id="cmpStatus" class="pnote" style="margin-top:4px"></div>
@@ -169,7 +207,7 @@
     <div id="h2h" class="pnote"></div>
     <div class="pnote">
       <b>🎓 강화학습</b>: 한 로봇(Q-테이블)이 셀프플레이로 매 판 보상을 받으며 바로바로 고쳐 나감(TD 학습).<br>
-      <b>🧬 진화</b>: 신경망 뇌 <b id="evoSize"></b>개가 한 세대. 서로 경기해서 보상 합계(적합도)가 높은 뇌만 살아남고, 교배·돌연변이로 다음 세대를 만듦(경기 중엔 학습 안 함).<br>
+      <b>🧬 진화</b>: 신경망 뇌 <b id="evoSize"></b>개가 한 세대. 전 세대 생존자와 경기해 점수 상위 25%만 살아남고, 돌연변이 자식으로 다음 세대를 만듦(경기 중엔 학습 안 함).<br>
       3D 화면: 🔵 블루 = 강화학습 로봇, 🔴 레드 = 진화 최고 개체. 평가는 둘 다 미학습 로봇과 100점(ε=0)으로 똑같이.
     </div>
   </div>
@@ -798,38 +836,48 @@ function nnAct(p, o){
   const lv=(v,L)=>{ let bi=0; for(let i=1;i<L.length;i++) if(Math.abs(L[i]-v)<Math.abs(L[bi]-v)) bi=i; return bi; };   // 화면 표시용 가까운 단계
   p.act=[lv(0.95*out[0],VLEV), lv(0.95*out[1],VLEV), lv(0.95*out[2],VLEV), lv(0.5*out[3],WLEV), lv(0.5*out[4],WLEV)];
 }
-// 한 세대: 개체들을 무작위로 짝지어 경기(진영 반반) → 판당 보상 = 적합도 → 상위는 그대로(엘리트), 나머지는 토너먼트 선택·교배·돌연변이
+// 한 세대 진행 (자연 선택):
+//  ① 각 개체가 '전 세대 생존자'(첫 세대는 같은 세대의 다른 개체)와 경기 — 진영 반반
+//  ② 그 경기에서 얻은 판당 점수(보상 합계) = 적합도
+//  ③ 적합도 상위 survive 비율만 살아남음 → 다음 세대의 '전 세대 생존자'가 됨
+//  ④ 생존자를 돌연변이시킨 자식으로 나머지 자리를 채움 → 반복
 class Evolution {
   constructor(opt){
     opt=opt||{};
-    this.size=opt.size||24; this.pointsPer=opt.pointsPer||12; this.rounds=opt.rounds||2;
-    this.elite=opt.elite||4; this.mutRate=opt.mutRate||0.15; this.sigma=opt.sigma||0.25;
-    this.pop=Array.from({length:this.size},()=>({w:randGenes(), fit:0, n:0}));
+    this.size=opt.size||24; this.survive=opt.survive||0.25; this.opponents=opt.opponents||2; this.pointsPer=opt.pointsPer||12;
+    this.mutRate=opt.mutRate||0.15; this.sigma=opt.sigma||0.25;
+    this.pop=Array.from({length:this.size},()=>({w:randGenes(), fit:0, n:0, won:0, lost:0}));
+    this.prev=null;                 // 전 세대 생존자들의 유전자(이번 세대의 상대)
+    this.prevBest=null;             // 전 세대 최고 개체
     this.gen=0; this.points=0; this.best=null; this.bestFit=-Infinity; this.history=[];
     this.startGen();
   }
   startGen(){
-    this.pop.forEach(g=>{ g.fit=0; g.n=0; });
-    this.pairs=[];
-    for(let r=0;r<this.rounds;r++){ const idx=this.pop.map((_,i)=>i); for(let i=idx.length-1;i>0;i--){ const j=(rand()*(i+1))|0; [idx[i],idx[j]]=[idx[j],idx[i]]; } for(let i=0;i+1<idx.length;i+=2) this.pairs.push([idx[i],idx[i+1]]); }
-    this.pi=0; this.m=null;
+    this.pop.forEach(g=>{ g.fit=0; g.n=0; g.won=0; g.lost=0; });
+    this.sched=[];
+    this.pop.forEach((g,i)=>{ for(let k=0;k<this.opponents;k++){
+      let ow;
+      if(this.prev) ow=this.prev[(rand()*this.prev.length)|0];
+      else { let j=(rand()*(this.size-1))|0; if(j>=i) j++; ow=this.pop[j].w; }
+      this.sched.push({i, ow});
+    } });
+    this.si=0; this.phase=0; this.m=null;
   }
   // 조금씩 실행(화면이 안 멈추게). 세대가 끝나면 true
   run(maxSteps){
     let s=0;
     while(s<maxSteps){
       if(!this.m){
-        if(this.pi>=this.pairs.length){ this.nextGen(); return true; }
-        const [i,j]=this.pairs[this.pi], half=this.pairPhase||0;
-        const A=makeNNBrain(this.pop[i].w), B=makeNNBrain(this.pop[j].w);
-        this.m = half===0 ? new Match(A,B) : new Match(B,A);
-        this.mi = half===0 ? [i,j] : [j,i];
+        if(this.si>=this.sched.length){ this.nextGen(); return true; }
+        const e=this.sched[this.si], A=makeNNBrain(this.pop[e.i].w), B=makeNNBrain(e.ow);
+        this.m = this.phase===0 ? new Match(A,B) : new Match(B,A);
       }
       const m=this.m;
       if(m.points>=this.pointsPer/2){
-        const [bi,ri]=this.mi; this.pop[bi].fit+=m.p1.ret; this.pop[bi].n+=m.points; this.pop[ri].fit+=m.p2.ret; this.pop[ri].n+=m.points;
+        const g=this.pop[this.sched[this.si].i], me=this.phase===0?m.p1:m.p2, op=this.phase===0?m.p2:m.p1;
+        g.fit+=me.ret; g.n+=m.points; g.won+=me.pointsWon; g.lost+=op.pointsWon;
         this.points+=m.points; this.m=null;
-        if(this.pairPhase){ this.pairPhase=0; this.pi++; } else this.pairPhase=1;
+        if(this.phase){ this.phase=0; this.si++; } else this.phase=1;
         continue;
       }
       m.step(); s++;
@@ -839,18 +887,23 @@ class Evolution {
   nextGen(){
     const pop=this.pop; pop.forEach(g=>g.score=g.n? g.fit/g.n : -1e9);
     pop.sort((a,b)=>b.score-a.score);
-    this.best=pop[0].w.slice(); this.bestFit=pop[0].score;
-    this.history.push({gen:this.gen, points:this.points, best:pop[0].score, mean:pop.reduce((a,g)=>a+g.score,0)/pop.length});
-    const pick=()=>{ let b=null; for(let t=0;t<3;t++){ const c=pop[(rand()*pop.length)|0]; if(!b||c.score>b.score) b=c; } return b; };
-    const next=pop.slice(0,this.elite).map(g=>({w:g.w.slice(), fit:0, n:0}));
-    while(next.length<this.size){
-      const a=pick(), b=pick(), w=new Array(NN_SIZE);
-      for(let i=0;i<NN_SIZE;i++){ w[i]=rand()<0.5?a.w[i]:b.w[i]; if(rand()<this.mutRate) w[i]+=randn()*this.sigma; }
-      next.push({w, fit:0, n:0});
+    const k=Math.max(2, Math.round(this.size*this.survive));
+    const top=pop[0];
+    this.prevBest=this.best; this.best=top.w.slice(); this.bestFit=top.score;
+    this.history.push({gen:this.gen, points:this.points, best:top.score, mean:pop.reduce((a,g)=>a+g.score,0)/pop.length,
+      winVsPrev: (top.won+top.lost)? top.won/(top.won+top.lost) : null, survivors:k});
+    const surv=pop.slice(0,k).map(g=>g.w.slice());
+    this.prev=surv;                                              // 다음 세대는 이 생존자들과 경기
+    const next=surv.map(w=>({w:w.slice(), fit:0, n:0, won:0, lost:0}));   // 생존자는 그대로 다음 세대로
+    while(next.length<this.size){                                // 나머지는 생존자의 돌연변이 자식
+      const parent=surv[(rand()*k)|0], w=parent.slice();
+      for(let i=0;i<NN_SIZE;i++) if(rand()<this.mutRate) w[i]+=randn()*this.sigma;
+      next.push({w, fit:0, n:0, won:0, lost:0});
     }
     this.pop=next; this.gen++; this.startGen();
   }
   bestBrain(){ return makeNNBrain((this.best||this.pop[0].w).slice()); }
+  prevBestBrain(){ return makeNNBrain((this.prevBest||this.pop[1%this.size].w).slice()); }
 }
 
 function stateCounts(brain){ const c={}; AXES.forEach(ax=>c[ax]=Object.keys(brain.q[ax]||{}).length); return c; }
@@ -1015,10 +1068,14 @@ function setupCameraControls(el){
     else if(e.touches.length===2){ const a=e.touches[0],b=e.touches[1]; const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); if(pinchD){ camR*=pinchD/d; applyCam(); } pinchD=d; } }, {passive:false});
   el.addEventListener('touchend', up);
 }
-function onResize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); layout(); drawCurve(); drawEvoCurve(); }
+function onResize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); layout(); drawCurve(); drawEvoCurve(); drawFitCurve(); }
 // 패널·힌트 배치: 상단 카드와 하단 컨트롤의 실제 크기에 맞춰 겹치지 않게
 function layout(){
-  const ui=document.getElementById('ui').getBoundingClientRect();
+  // 왼쪽 위 탭과 상단 점수 카드가 겹치지 않게: 데스크톱에선 카드 영역을 탭 오른쪽부터 시작
+  const uiEl=document.getElementById('ui'), tl=document.getElementById('topLeft').getBoundingClientRect();
+  uiEl.style.paddingLeft = innerWidth>=760 ? (tl.right+12)+'px' : '';
+  uiEl.style.paddingTop  = innerWidth>=760 ? '' : (tl.bottom+4)+'px';      // 모바일: 카드를 탭 아래로
+  const ui=uiEl.getBoundingClientRect();
   const ctrl=document.getElementById('controls').getBoundingClientRect();
   const hint=document.getElementById('hint'), panel=document.getElementById('panel');
   hint.style.bottom=(innerHeight-ctrl.top)+'px';
@@ -1027,15 +1084,21 @@ function layout(){
   if(innerWidth>=760){ panel.style.top=top+'px'; panel.style.bottom='auto'; }
   else { panel.style.top='auto'; panel.style.bottom=(innerHeight-floor+8)+'px'; }
   panel.style.maxHeight=avail+'px';
-  const ep2=document.getElementById('evoPanel');
-  if(innerWidth>=760){ ep2.style.top=top+'px'; ep2.style.bottom='auto'; } else { ep2.style.top='auto'; ep2.style.bottom=(innerHeight-floor+8)+'px'; }
-  ep2.style.maxHeight=avail+'px';
+  for(const id of ['evoPanel','evoMainPanel']){
+    const ep2=document.getElementById(id);
+    if(innerWidth>=760){ ep2.style.top=top+'px'; ep2.style.bottom='auto'; } else { ep2.style.top='auto'; ep2.style.bottom=(innerHeight-floor+8)+'px'; }
+    ep2.style.maxHeight=avail+'px';
+  }
 }
 
 // ===== 모드 전환: 🎓 학습(셀프플레이) / ⚔️ 검증(학습 AI vs 미학습 AI) =====
 function setMode(m){
   mode=m;
-  if(m==='evo'){
+  if(m==='evoMain'){
+    // 🧬 진화 탭: 블루 = 현재 세대 최고, 레드 = 전 세대 최고
+    duelMain={gen:evoMain.gen};
+    game=new Match(evoMain.bestBrain(), evoMain.prevBestBrain(), hooks);
+  } else if(m==='evo'){
     // 🧬 비교 화면: 블루 = 비교용 강화학습 로봇(복사본, ε=0), 레드 = 진화 최고 개체
     duelInfo={rl:cmpBrain.episodes, gen:evo.gen};
     game=new Match(cloneBrain(cmpBrain,{frozen:true,eps:0}), evo.bestBrain(), hooks);
@@ -1052,6 +1115,7 @@ function setMode(m){
 }
 function nameOf(p){
   if(mode==='evo') return p===game.p1?'🎓 강화학습 로봇':'🧬 진화 로봇';
+  if(mode==='evoMain') return p===game.p1?'🧬 현재 세대':'🧬 전 세대';
   if(mode==='verify') return p===game.p1?'🎓 학습 로봇':'🐣 미학습 로봇';
   return p===game.p1?'🔵 블루':'🔴 레드';
 }
@@ -1132,8 +1196,8 @@ function updateUI(){
   g1.textContent=p1.games; g2.textContent=p2.games;
   sm1.textContent=p1.smashWins; sv1.textContent=p1.saves; er1.textContent=p1.err; rt1.textContent=pct(p1.hits,p1.hits+p1.misses); ov1.textContent=pct(p1.overs,p1.hits);
   sm2.textContent=p2.smashWins; sv2.textContent=p2.saves; er2.textContent=p2.err; rt2.textContent=pct(p2.hits,p2.hits+p2.misses); ov2.textContent=pct(p2.overs,p2.hits);
-  n1.textContent = mode==='evo' ? '🎓 강화학습('+duelInfo.rl+'판)' : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
-  n2.textContent = mode==='evo' ? '진화 '+duelInfo.gen+'세대 🧬' : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
+  n1.textContent = mode==='evoMain' ? '🧬 '+duelMain.gen+'세대 최고' : mode==='evo' ? '🎓 강화학습('+duelInfo.rl+'판)' : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
+  n2.textContent = mode==='evoMain' ? (duelMain.gen>0? (duelMain.gen-1)+'세대 최고 🧬' : '같은 세대 🧬') : mode==='evo' ? '진화 '+duelInfo.gen+'세대 🧬' : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
   setn.textContent=p1.games+p2.games+1;
   const b=game.b;
   srv.textContent = (b.serve ? b.lastHitter : game.currentServer())===p1 ? '🔵' : '🔴';
@@ -1143,7 +1207,10 @@ function updateUI(){
   epsSlider.value=brain.eps; epsVal.textContent=brain.eps.toFixed(2); epsLockChk.checked=brain.epsLock;   // 자동감소 중에도 동기화
   rallyEl.textContent=game.rally;
   avg.textContent=recentAvg().toFixed(1);
-  if(mode==='evo'){
+  if(mode==='evoMain'){
+    const n=p1.pointsWon+p2.pointsWon;
+    modeRow.innerHTML='🧬 현재 세대 vs 전 세대 · 현재 세대 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점)';
+  } else if(mode==='evo'){
     const n=p1.pointsWon+p2.pointsWon;
     modeRow.innerHTML='🧬 진화 vs 🎓 강화학습 대결 · 🎓 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점)';
   } else if(mode==='verify'){
@@ -1155,6 +1222,7 @@ function updateUI(){
   const sc=stateCounts(brain); nX.textContent=sc.x; nY.textContent=sc.y; nZ.textContent=sc.z; nP.textContent=sc.p; nW.textContent=sc.w;
   renderObs();
   if(evoOn) renderEvoStats();
+  if(curScreen==='evo') renderEvoMainStats();
   tdErr.textContent=brain.updates? brain.tdAvg.toFixed(3) : '–';
   drawSpark();
 }
@@ -1189,6 +1257,9 @@ function runJobs(budgetMs){
         curve.sort((a,b)=>a.ep-b.ep);
         renderPanel();
       }
+    } else if(evoMainJobs.length){
+      const e=evoMainJobs[0];
+      if(e.job.run(400)){ evoMainJobs.shift(); const h=evoMain.history.find(x=>x.gen===e.gen); if(h) h.vsU=e.job.r; renderEvoMain(); }
     } else if(cmpJobs.length){
       const e=cmpJobs[0];
       if(e.job.run(400)){
@@ -1396,16 +1467,103 @@ function runCmp(budgetMs){
     cmpCheck();
   }
 }
-function openEvo(){
-  evoOn=true; prevMode=(mode==='evo'?'train':mode);
-  if(!evo) resetCmp();
-  document.body.classList.add('evo'); document.getElementById('evoBtn').classList.add('on');
-  setMode('evo'); layout(); renderEvo();
+// ===== 화면(탭) 전환: 🧬 진화 / 🎓 강화 / ⚖️ 비교 =====
+let curScreen='rl', rlMode='train';
+function setScreen(scr){
+  if(curScreen==='rl') rlMode=mode;                       // 강화 탭의 모드(학습/검증)를 기억
+  curScreen=scr; evoOn=(scr==='cmp');
+  document.body.classList.toggle('scr-evo', scr==='evo');
+  document.body.classList.toggle('scr-cmp', scr==='cmp');
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.scr===scr));
+  if(scr==='cmp'){ if(!evo) resetCmp(); setMode('evo'); renderEvo(); }
+  else if(scr==='evo'){ if(!evoMain) resetEvoMain(); setMode('evoMain'); renderEvoMain(); }
+  else setMode(rlMode==='evo'||rlMode==='evoMain' ? 'train' : rlMode);
+  layout();
 }
-function closeEvo(){
-  evoOn=false; cmpRun=false; updateCmpBtn();
-  document.body.classList.remove('evo'); document.getElementById('evoBtn').classList.remove('on');
-  setMode(prevMode); layout();
+
+// =====================================================================
+//  🧬 진화 탭: 전 세대 생존자와 경기 → 상위 생존 → 돌연변이 자식 (Evolution, 백그라운드에서 조금씩 실행)
+// =====================================================================
+let evoMain=null, evoMainRun=false, evoMainJobs=[], evoSurvive=0.25, duelMain={gen:0}, fitHover=null;
+function resetEvoMain(){
+  evoMain=new Evolution({survive:evoSurvive}); evoMainJobs=[]; evoMainRun=false; updateEvoRunBtn();
+  if(curScreen==='evo') setMode('evoMain');
+  renderEvoMain();
+}
+function runEvoMain(budgetMs){
+  const t0=performance.now();
+  while(performance.now()-t0<budgetMs){
+    if(evoMain.run(300)){                              // 한 세대가 끝남
+      const h=evoMain.history.at(-1);
+      if(h.gen%2===0 && evoMainJobs.length<3) evoMainJobs.push({gen:h.gen, job:new EvalJob(evoMain.bestBrain(), UNTRAINED, EVAL_POINTS)});
+      renderEvoMain();
+    }
+  }
+}
+function updateEvoRunBtn(){ const b=document.getElementById('evoRunBtn'); if(b) b.textContent=evoMainRun?'⏸ 진화 정지':'▶ 진화 시작'; }
+function renderEvoMainStats(){
+  if(!evoMain) return;
+  const h=evoMain.history.at(-1), lastU=[...evoMain.history].reverse().find(x=>x.vsU);
+  eGen.textContent=evoMain.gen+'세대 · '+evoMain.points+'판';
+  eFit.textContent=h? h.best.toFixed(0)+' / '+h.mean.toFixed(0) : '–';
+  eVsPrev.textContent=h && h.winVsPrev!=null ? pctR(h.winVsPrev)+(h.gen===0?' (첫 세대: 같은 세대 상대)':'') : '–';
+  eVsU.textContent=lastU? pctR(lastU.vsU.retA)+' · '+pctR(lastU.vsU.winRateA)+' ('+lastU.gen+'세대)' : '–';
+  const done=evoMain.si/evoMain.sched.length;
+  evoStatus.textContent=(evoMainRun?'진화 중… ':'정지됨 · ')+evoMain.gen+'세대 평가 '+Math.round(100*done)+'% · 생존 '+Math.round(100*evoMain.survive)+'% ('+Math.max(2,Math.round(evoMain.size*evoMain.survive))+'/'+evoMain.size+'개체)';
+}
+function renderEvoMain(){ renderEvoMainStats(); drawFitCurve(); }
+const C_MEAN='#8a9bbd';
+function fitGeom(){
+  const cv=fitCanvas, W=cv.clientWidth||300, H=cv.clientHeight||150, L=40, Rp=36, T=10, B=20, pw=W-L-Rp, ph=H-T-B;
+  const hs=evoMain? evoMain.history : [];
+  let lo=Math.min(0,...hs.map(h=>h.mean)), hi=Math.max(10,...hs.map(h=>h.best)); const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
+  const maxG=Math.max(10, hs.length? hs.at(-1).gen : 0);
+  return {W,H,L,T,pw,ph,maxG,lo,hi, X:g=>L+g/maxG*pw, Y:v=>T+(1-(v-lo)/(hi-lo))*ph};
+}
+function drawFitCurve(){
+  const cv=fitCanvas; if(!cv || curScreen!=='evo') return;
+  const g=fitGeom(), dpr=Math.min(devicePixelRatio||1,2), hs=evoMain.history;
+  if(cv.width!==Math.round(g.W*dpr) || cv.height!==Math.round(g.H*dpr)){ cv.width=Math.round(g.W*dpr); cv.height=Math.round(g.H*dpr); }
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,g.W,g.H);
+  const ticks=[g.lo, 0, g.hi].filter((v,i,a)=>a.indexOf(v)===i && v>=g.lo && v<=g.hi);
+  c.lineWidth=1; c.font='10px "Segoe UI","Malgun Gothic",sans-serif'; c.textAlign='right'; c.textBaseline='middle';
+  ticks.forEach(v=>{ const y=Math.round(g.Y(v))+0.5; c.strokeStyle=v===0?C_BASE:C_GRID; c.beginPath(); c.moveTo(g.L,y); c.lineTo(g.L+g.pw,y); c.stroke(); c.fillStyle=C_MUTED; c.fillText(Math.round(v), g.L-5, y); });
+  c.textBaseline='top'; c.textAlign='left'; c.fillText('0세대', g.L, g.T+g.ph+5); c.textAlign='right'; c.fillText(g.maxG+'세대', g.L+g.pw, g.T+g.ph+5);
+  if(!hs.length){ c.textAlign='center'; c.textBaseline='middle'; c.fillText('▶ 진화 시작을 누르면 세대마다 점이 찍힙니다', g.L+g.pw/2, g.T+g.ph/2); return; }
+  const labels=[];
+  [['mean',C_MEAN],['best',C_EV]].forEach(([k,col])=>{
+    c.strokeStyle=col; c.lineWidth=2; c.lineJoin='round'; c.lineCap='round'; c.beginPath();
+    hs.forEach((h,i)=>{ const x=g.X(h.gen), y=g.Y(h[k]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
+    const l=hs.at(-1), x=g.X(l.gen), y=g.Y(l[k]);
+    c.fillStyle=C_SURF; c.beginPath(); c.arc(x,y,6,0,7); c.fill(); c.fillStyle=col; c.beginPath(); c.arc(x,y,4,0,7); c.fill();
+    labels.push({x,y,t:Math.round(l[k])});
+  });
+  if(Math.abs(labels[0].y-labels[1].y)<12){ const up=labels[0].y<=labels[1].y?0:1; labels[up].y-=7; labels[1-up].y+=7; }
+  c.fillStyle=C_TEXT; c.font='600 11px "Segoe UI","Malgun Gothic",sans-serif'; c.textAlign='left'; c.textBaseline='middle';
+  labels.forEach(l=>c.fillText(l.t, l.x+8, Math.min(g.T+g.ph-4, Math.max(g.T+4, l.y))));
+  if(fitHover!=null){ const x=Math.round(g.X(fitHover))+0.5; c.strokeStyle=C_MUTED; c.lineWidth=1; c.beginPath(); c.moveTo(x,g.T); c.lineTo(x,g.T+g.ph); c.stroke(); }
+}
+function setupFitHover(){
+  const tip=document.getElementById('evoFitTip');
+  const show=clientX=>{
+    if(!evoMain || !evoMain.history.length) return;
+    const g=fitGeom(), rect=fitCanvas.getBoundingClientRect(), v=(clientX-rect.left-g.L)/g.pw*g.maxG;
+    let h=evoMain.history[0]; evoMain.history.forEach(x=>{ if(Math.abs(x.gen-v)<Math.abs(h.gen-v)) h=x; });
+    fitHover=h.gen; drawFitCurve();
+    tip.textContent='';
+    const line=t=>{ const d=document.createElement('div'); d.innerHTML=t; tip.appendChild(d); };
+    line('<b>'+h.gen+'세대</b> · 경험 '+h.points+'판');
+    line('<span class="k kEV"></span><b>'+h.best.toFixed(0)+'</b> 최고 적합도');
+    line('<span class="k kMean"></span><b>'+h.mean.toFixed(0)+'</b> 평균 적합도');
+    if(h.winVsPrev!=null) line('최고 개체 전 세대 상대 승률 '+pctR(h.winVsPrev));
+    if(h.vsU) line('미학습 상대 받기 '+pctR(h.vsU.retA));
+    tip.style.display='block';
+    const x=g.X(h.gen), tw=tip.offsetWidth;
+    tip.style.left=Math.max(0, x+12+tw<=g.W ? x+12 : x-12-tw)+'px'; tip.style.top=g.T+'px';
+  };
+  fitCanvas.addEventListener('pointermove', e=>show(e.clientX));
+  fitCanvas.addEventListener('pointerdown', e=>show(e.clientX));
+  fitCanvas.addEventListener('pointerleave', ()=>{ fitHover=null; tip.style.display='none'; drawFitCurve(); });
 }
 function updateCmpBtn(){ const b=document.getElementById('cmpRunBtn'); b.textContent=cmpRun?'⏸ 비교 학습 정지':'▶ 비교 학습 시작'; }
 const pctR=v=>Math.round(100*v)+'%';
@@ -1502,7 +1660,8 @@ function animate(){
     uiDirty=true;
   }
   if(fast){ runFast(10); uiDirty=true; }
-  if(evoOn && cmpRun){ runCmp(8); uiDirty=true; }
+  if(cmpRun){ runCmp(8); uiDirty=true; }
+  if(evoMainRun){ runEvoMain(8); uiDirty=true; }
   maybeEvaluate();
   runJobs(running||fast ? 6 : 14);                           // 평가는 프레임마다 조금씩(경기 중엔 6ms)
   syncScene();
@@ -1517,6 +1676,7 @@ function animate(){
 // ===== DOM refs & boot =====
 let s1,s2,g1,g2,n1,n2,setn,lead,srv,sm1,sm2,sv1,sv2,er1,er2,rt1,rt2,ov1,ov2,ep,eps,rallyEl,avg,spark,fbEl,modeRow;
 let epsSlider,epsVal,epsLockChk;
+let fitCanvas,eGen,eFit,eVsPrev,eVsU,evoStatus;
 let evoCanvas,h2hEl,cRLpts,cEVpts,cRLwin,cRLret,cRLover,cEVwin,cEVret,cEVover,cmpStatus;
 let curveCanvas,tWin,tWinSub,tRetT,tRetU,tOvT,tOvU,verdictEl,fastProg,benchEl,nX,nY,nZ,nP,nW,tdErr,obsHead,obsBody;
 function boot(){
@@ -1545,8 +1705,17 @@ function boot(){
   cRLpts=$('cRLpts'); cEVpts=$('cEVpts'); cRLwin=$('cRLwin'); cRLret=$('cRLret'); cRLover=$('cRLover'); cEVwin=$('cEVwin'); cEVret=$('cEVret'); cEVover=$('cEVover');
   $('evoSize').textContent=24;
   setupEvoHover();
-  $('evoBtn').onclick=()=> evoOn ? closeEvo() : openEvo();
-  $('evoBack').onclick=closeEvo;
+  document.querySelectorAll('#tabs button').forEach(b=> b.onclick=()=>setScreen(b.dataset.scr));
+  // 🧬 진화 탭
+  fitCanvas=$('evoFitCurve'); eGen=$('eGen'); eFit=$('eFit'); eVsPrev=$('eVsPrev'); eVsU=$('eVsU'); evoStatus=$('evoStatus');
+  setupFitHover();
+  $('evoRunBtn').onclick=()=>{ evoMainRun=!evoMainRun; updateEvoRunBtn(); renderEvoMainStats(); };
+  $('evoResetBtn').onclick=resetEvoMain;
+  $('evoDuelBtn').onclick=()=>setMode('evoMain');
+  document.querySelectorAll('#survSeg button').forEach(bt=> bt.onclick=()=>{
+    evoSurvive=+bt.dataset.s; if(evoMain) evoMain.survive=evoSurvive;   // 다음 세대 선택부터 적용
+    document.querySelectorAll('#survSeg button').forEach(x=>x.classList.toggle('on',x===bt));
+    $('survPct').textContent=Math.round(100*evoSurvive)+'%'; renderEvoMainStats(); });
   $('cmpRunBtn').onclick=()=>{ cmpRun=!cmpRun; updateCmpBtn(); renderEvoStats(); };
   $('cmpResetBtn').onclick=()=>{ cmpRun=false; updateCmpBtn(); resetCmp(); setMode('evo'); };
   $('duelBtn').onclick=()=>setMode('evo');
