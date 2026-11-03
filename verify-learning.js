@@ -7,7 +7,7 @@
 //  2) 빈 뇌로 셀프플레이 학습, 체크포인트마다 '미학습 AI 상대 승률' 측정 → 학습 곡선
 //  3) 최종: 학습 AI vs 미학습 AI → 50%에서 통계적으로 유의하게 벗어나면 ✅ (종료 코드 0)
 //
-//  사용법:  node verify-learning.js [학습판수=3000] [최종평가점수=400] [--seed 숫자]
+//  사용법:  node verify-learning.js [학습판수=5000] [최종평가점수=400] [--seed 숫자]
 // =====================================================================
 'use strict';
 const fs = require('fs');
@@ -17,7 +17,7 @@ const vm = require('vm');
 const args = process.argv.slice(2);
 const seedIdx = args.indexOf('--seed');
 const seed = seedIdx >= 0 ? Number(args.splice(seedIdx, 2)[1]) : null;
-const TRAIN = Number(args[0]) || 3000;
+const TRAIN = Number(args[0]) || 5000;
 const FINAL_POINTS = Number(args[1]) || 400;
 const CHECK_POINTS = 100;   // 체크포인트 평가 점수(브라우저 패널과 동일)
 
