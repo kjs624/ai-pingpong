@@ -57,7 +57,7 @@
   .tile .rr { font-size:12px; line-height:1.6; }
   .tile .rr b { font-size:15px; }
   .mini2 { width:100%; border-collapse:collapse; font-size:11px; margin-top:2px; }
-  .mini2 th { color:#9fb0d0; font-weight:400; text-align:right; }
+  .mini2 th { color:#9fb0d0; font-weight:400; text-align:right; white-space:nowrap; }
   .mini2 td { text-align:right; padding:1px 0; white-space:nowrap; } .mini2 td:first-child { text-align:left; }
   .mini2 b { font-size:14px; }
   .mini2 td+td, .mini2 th+th { padding-left:8px; }
@@ -176,6 +176,7 @@
     <label class="lbl" style="pointer-events:auto; cursor:pointer;"><input type="checkbox" id="epsLockChk" style="vertical-align:middle;"> 고정(자동감소 정지)</label>
     <span class="lbl">시점</span>
     <button id="camBtn">전환</button>
+    <button id="shadowBtn">그림자 켬</button>
   </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -207,7 +208,8 @@ const Y_HIT=1.3;               // 시작 높이
 // 로봇팔 작업 공간(라켓이 갈 수 있는 범위): 앞뒤는 네트에서 4.5~11.2, 위아래 R~3.6, 좌우 벽 ±6.4
 const XMIN=halfL-2.5, XMAX=HOMEX+3, YMAX=3.6, ZWALL=halfW+2.5;
 const ARM_BASE_X=halfL+5.2;     // 로봇팔 받침대 위치(|x|) — 화면 표시용
-let REACH=1.6;              // 라켓 3D 리치(구): 공이 라켓 중심에서 이 거리 안에 들어오면 맞음
+let FACE_R=1.0;             // 공이 맞는 라켓 면 반지름(라켓 0.85 + 공 0.15). 면에 실제로 닿아야 맞음
+const FACE_T=0.075;         // 라켓 면 두께의 절반
 let PMAX=0.95;             // 축별 최고 속도
 let PACC=0.10;            // 축별 가속도 한계 — 관성이 있어서 미리 출발하고 제때 멈춰야 함
 const MAGNUS=0.03;           // 마그누스 계수: 회전이 만드는 휘어짐/낙하
@@ -327,6 +329,11 @@ function makePlayer(side, brain){
 }
 
 const HIST=16;   // 센서 지연용 공 궤적 기록(링버퍼)
+// 라켓 면의 법선(상대 쪽을 향함): 화면의 라켓 회전(손목 각도 포함)과 같은 식
+function faceNormal(p){
+  const tz=0.15+p.wp, ty=(p.side<0?0:Math.PI)-p.wy;
+  return [Math.cos(tz)*Math.cos(ty), Math.sin(tz), -Math.cos(tz)*Math.sin(ty)];
+}
 
 // ===== 경기(환경): 물리 + 실제 탁구 규칙 + 두 로봇의 결정·학습 =====
 class Match {
@@ -484,7 +491,7 @@ class Match {
     b.over=true;
     this.points++; this.rallyHist.push(this.rally); if(this.rallyHist.length>200) this.rallyHist.shift();
     if(reason==='winner') loser.misses++;                       // 받을 차례인데 못 받음
-    if(!b.touched){                                             // 아무도 공을 건드리지 못함 → 무득점, 서브(턴)는 상대에게
+    if(!b.touched || detail==='block'){                         // 아무도 공을 못 건드림 / 튀기 전에 라켓에 맞음 → 무득점, 서브(턴)는 상대에게
       this.voids++;
       this.voidFlip^=1;
       this.settle(null, true);
@@ -514,6 +521,8 @@ class Match {
     this.pushHist();
     if(this.tick%CFG.every===0){ this.decide(p1); this.decide(p2); }
     this.tick++;
+    const rcv0 = b.expectSide>0? p2:p1;                        // 이동 전 '공 − 리시버 라켓' 상대 위치(충돌 판정용)
+    const q0x=b.x-rcv0.cx, q0y=b.y-rcv0.cy, q0z=b.z-rcv0.cz;
     this.moveBody(p1); this.moveBody(p2);
 
     const prevx=b.x;
@@ -561,8 +570,30 @@ class Match {
 
     // 리시버가 받을 차례 — 3D 리치 안(반드시 1바운스 후)
     const rcv = b.expectSide>0? p2:p1;
-    if(b.canReturn && Math.hypot(b.x-rcv.cx, b.y-rcv.cy, b.z-rcv.cz) < REACH){
+    // ▶ 라켓 면 충돌: 이번 스텝 동안 공 표면이 라켓 면에 닿았는지(이동 경로로 판정 → 빠른 공도 건너뛰지 않음)
+    const n=faceNormal(rcv);
+    const q1x=b.x-rcv.cx, q1y=b.y-rcv.cy, q1z=b.z-rcv.cz;
+    const d0=q0x*n[0]+q0y*n[1]+q0z*n[2], d1=q1x*n[0]+q1y*n[1]+q1z*n[2];   // 면에서 공 중심까지 거리(앞쪽 +)
+    const touch=R+FACE_T;
+    let hitFace=false;
+    if(d1<=touch && d0>-touch){
+      const t=d0>d1 ? Math.max(0,Math.min(1,(d0-touch)/(d0-d1))) : 1;      // 닿는 순간
+      const cx=q0x+(q1x-q0x)*t, cy=q0y+(q1y-q0y)*t, cz=q0z+(q1z-q0z)*t, dc=cx*n[0]+cy*n[1]+cz*n[2];
+      if(Math.hypot(cx-dc*n[0], cy-dc*n[1], cz-dc*n[2]) <= FACE_R){
+        hitFace=true;
+        const lx=cx-dc*n[0], ly=cy-dc*n[1], lz=cz-dc*n[2];                 // 공을 면 위(닿은 자리)에 놓음 → 겹쳐 보이지 않음
+        b.x=rcv.cx+lx+n[0]*touch; b.y=rcv.cy+ly+n[1]*touch; b.z=rcv.cz+lz+n[2]*touch;
+      }
+    }
+    if(hitFace && b.canReturn){
       this.doReturn(rcv);
+    } else if(hitFace){
+      // 내 코트에 튀기 전에 라켓에 닿음: 통과하지 않고 라켓에 막혀 튕김 → 오브스트럭션은 무득점(서브 교대)
+      const vn=(b.vx-rcv.mvx)*n[0]+(b.vy-rcv.mvy)*n[1]+(b.vz-rcv.mvz)*n[2];
+      if(vn<0){ b.vx-=1.5*vn*n[0]; b.vy-=1.5*vn*n[1]; b.vz-=1.5*vn*n[2]; }
+      if(Math.abs(b.x)<=halfL) this.endRally(b.lastHitter, rcv, 'winner', 'block');   // 코트로 오던 공을 막음 = 무득점
+      else { const winner=b.lastHitter===p1?p2:p1; this.endRally(winner, b.lastHitter, 'fault', 'out'); }   // 이미 코트 밖으로 나가던 공 = 친 사람 실책
+      return;
     } else if((rcv.side>0)? b.x>XMAX+1.5 : b.x<-(XMAX+1.5)){
       // 리시버를 지나쳐 감
       if(b.bounceOnExpect>=1) this.endRally(b.lastHitter, rcv, 'winner', 'passed');
@@ -638,7 +669,14 @@ const EVAL_POINTS = 100;          // 체크포인트마다 미학습 AI와 100�
 let fast = null;                  // ⚡ 빠른 학습 진행 {m, end, start}
 let uiDirty = true;
 
-let scene,camera,renderer, table,net,ball, arm1,arm2;
+let scene,camera,renderer, table,net,ball, arm1,arm2, sun;
+let shadowsOn=true;   // 그림자 켜기/끄기 (브라우저에 기억)
+try{ shadowsOn = localStorage.getItem('pp-shadows')!=='0'; }catch(e){}
+function applyShadows(){
+  renderer.shadowMap.enabled=shadowsOn; sun.castShadow=shadowsOn;
+  scene.traverse(o=>{ if(o.material) [].concat(o.material).forEach(m=>m.needsUpdate=true); });   // 셰이더 다시 만들기
+  const bt=document.getElementById('shadowBtn'); if(bt) bt.textContent='그림자 '+(shadowsOn?'켬':'끔');
+}
 let running=false, speed=1, camMode=0;
 
 // ===== 씬 =====
@@ -657,7 +695,7 @@ function init(){
   scene.add(new THREE.AmbientLight(0x8899cc,0.6));
   const dl=new THREE.DirectionalLight(0xffffff,0.9); dl.position.set(6,18,8); dl.castShadow=true;
   dl.shadow.camera.left=-20;dl.shadow.camera.right=20;dl.shadow.camera.top=20;dl.shadow.camera.bottom=-20;
-  dl.shadow.mapSize.set(1024,1024); scene.add(dl);
+  dl.shadow.mapSize.set(1024,1024); scene.add(dl); sun=dl;
 
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(90,90), new THREE.MeshStandardMaterial({color:0x0a1122,roughness:1}));
   floor.rotation.x=-Math.PI/2; floor.position.y=FLOOR_Y; floor.receiveShadow=true; scene.add(floor);
@@ -804,7 +842,12 @@ const hooks={
   smash:p=>spawnBurst(p.colorHex),
   toast:(txt,color)=>showToast(txt,color),
   set:p=>showToast(nameOf(p)+' 세트 승리! 🏆', p.color),
-  void:(rcv)=>{ showToast('🚫 아무도 못 건드림 · 무득점 · 서브 교대', rcv.color); fbEl.textContent='📋 무득점: '+nameOf(rcv)+'이(가) 서브를 건드리지 못함 — 점수 없이 서브 차례가 넘어감'; uiDirty=true; },
+  void:(rcv,info)=>{
+    const next=game.currentServer();   // 다음 판의 서버(이미 교대 반영됨)
+    const why=info&&info.detail==='block' ? '튀기 전에 라켓에 맞음(오브스트럭션)' : '아무도 못 건드림';
+    showToast('🚫 '+why+' · 무득점 → 다음 서브 '+nameOf(next), next.color);
+    fbEl.textContent='📋 무득점: '+why+' — 점수 없이 서브가 '+nameOf(next)+'에게 넘어감';
+    uiDirty=true; },
   point:(winner,loser,info)=>{
     if(info.smashWinner) showToast(nameOf(winner)+' 💥 스매시 위너!'+(info.combo?' '+(info.combo+1)+'연타!':''), winner.color);
     else showToast(nameOf(winner)+' 득점 +1  ·  '+(info.reason==='fault'?({net:'🕸️ 네트',short:'짧음',out:'아웃'}[info.detail]||'상대 실책'):'위너샷'), winner.color);
@@ -821,6 +864,7 @@ function lossFeedback(loser, detail){
     out:   '아웃 — 너무 세게 밀었거나 옆으로 너무 휘두름',
     passed:'받기 실패 — 공이 오는 곳으로 팔을 못 옮김',
     miss:  '받기 실패 — 팔이 늦어 공이 두 번 튐',
+    block: '오브스트럭션 — 공이 내 코트에 튀기 전에 라켓에 맞음(무득점)',
   }[detail] || '실점';
   fbEl.textContent = '📋 패인: '+nameOf(loser)+' — '+msg;
 }
@@ -1131,6 +1175,8 @@ function boot(){
   if(window.ResizeObserver){ const ro=new ResizeObserver(layout); ro.observe($('ui')); ro.observe($('controls')); }
   document.querySelectorAll('[data-speed]').forEach(bt=> bt.onclick=()=> speed=parseFloat(bt.dataset.speed));
   $('camBtn').onclick=()=>{ camMode=(camMode+1)%3; setCamera(); };
+  $('shadowBtn').onclick=()=>{ shadowsOn=!shadowsOn; try{ localStorage.setItem('pp-shadows', shadowsOn?'1':'0'); }catch(e){} applyShadows(); };
+  applyShadows();
   // 탐험율(ε) 수동 조절: 슬라이더를 움직이면 즉시 반영 + 자동감소 고정 (학습 중인 뇌에 적용)
   epsSlider.oninput=()=>{ const v=parseFloat(epsSlider.value); brain.eps=v; brain.epsLock=true; epsLockChk.checked=true; epsVal.textContent=v.toFixed(2); };
   epsLockChk.onchange=()=>{ brain.epsLock=epsLockChk.checked; };
