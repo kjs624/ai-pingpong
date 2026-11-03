@@ -195,7 +195,7 @@ let rand=Math.random;   // 난수 (검증 스크립트에서 시드 고정 가�
 
 // ===== 규격 (실제 탁구 비율: 2.74m × 1.525m, 네트 0.1525m, 공 40mm) =====
 const TL=14, TW=7.8, NET_H=0.78, halfL=TL/2, halfW=TW/2;
-const R=0.15, GRAV=0.015, REST=0.7;
+const R=0.02*TL/2.74, GRAV=0.015, REST=0.7;   // 공 반지름: 실제 지름 40mm (≈0.102)
 const TABLE_TOP=0;              // 테이블 상면 y
 const FLOOR_Y=-6;                        // 바닥 y
 const HALF_FALL=(FLOOR_Y+TABLE_TOP)/2;   // 바닥~상면의 절반(-3): 공이 여기까지 떨어지면 그 랠리 패배
