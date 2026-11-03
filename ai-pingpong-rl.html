@@ -220,7 +220,7 @@ const MAGNUS=0.03;           // 마그누스 계수: 회전이 만드는 휘어�
 const SPIN_DECAY=0.992;      // 회전 감쇠(매 스텝)
 const RALLY_CAP=80;          // 안전장치: 지나치게 긴 랠리는 무승부 리셋
 const WIN_POINTS=11;         // 세트 승리 점수 (2점차)
-const REACT=9, REACT_FAST=4; // 센서 지연(스텝): 조금 전의 공을 보고 판단. 강타가 오면 빠르게
+const REACT=6.7, REACT_FAST=4; // 센서 지연(스텝, 소수면 두 스텝 사이를 보간): 조금 전의 공을 보고 판단. 강타가 오면 빠르게
 
 // ===== 강화학습 하이퍼파라미터 =====
 const CFG={
@@ -230,10 +230,10 @@ const CFG={
   epsStart:1.0,      // 처음엔 100% 무작위(=미학습)
   epsMin:0.05,       // 탐험 하한
   epsDecay:0.998,    // 에피소드(포인트)마다 ε×0.998
-  rHit:+30,          // 보상: 공을 받으면(라켓에 닿음)
-  rOver:+50,         // 보상: 공을 넘기면(네트를 넘어 상대 코트에 들어감)
-  rWin:+100,         // 보상: 포인트를 이기면 (받기·넘기기보다 크게)
-  rLose:-100,        // 보상: 포인트를 지면
+  rHit:+45,          // 보상: 공을 받으면(라켓에 닿음) — 랠리를 이어 가는 보상
+  rOver:+75,         // 보상: 공을 넘기면(네트를 넘어 상대 코트에 들어감) — 랠리를 이어 가는 보상
+  rWin:+80,          // 보상: 포인트를 이기면
+  rLose:-80,         // 보상: 포인트를 지면
   // 받기·넘기기를 승패보다 너무 작게(예: 1·5) 하면 승패 잡음에 묻혀 '받기'를 못 배우는 시드가 많음(실측)
 };
 
@@ -385,7 +385,17 @@ class Match {
     e.x=b.x; e.y=b.y; e.z=b.z; e.vx=b.vx; e.vy=b.vy; e.vz=b.vz; e.canReturn=b.canReturn;
     this.hHead=(this.hHead+1)%HIST; if(this.hLen<HIST) this.hLen++;
   }
-  perceived(lag){ return this.hLen>lag ? this.hist[(this.hHead-1-lag+2*HIST)%HIST] : this.b; }
+  // lag 스텝 전의 공. 소수(예: 6.7)면 6스텝 전과 7스텝 전 사이를 보간
+  perceived(lag){
+    const lo=Math.floor(lag), f=lag-lo, at=k=>this.hist[(this.hHead-1-k+2*HIST)%HIST];
+    if(this.hLen<=lo) return this.b;
+    if(f===0 || this.hLen<=lo+1) return at(lo);
+    const a=at(lo), c=at(lo+1), v=this.pv||(this.pv={});
+    v.x=a.x+(c.x-a.x)*f; v.y=a.y+(c.y-a.y)*f; v.z=a.z+(c.z-a.z)*f;
+    v.vx=a.vx+(c.vx-a.vx)*f; v.vy=a.vy+(c.vy-a.vy)*f; v.vz=a.vz+(c.vz-a.vz)*f;
+    v.canReturn=f<0.5?a.canReturn:c.canReturn;
+    return v;
+  }
 
   // ===== 🧠 결정 (every 스텝마다): 관측 → 직전 행동 TD 업데이트 → 축별 ε-greedy 새 행동 =====
   decide(p){
