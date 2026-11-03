@@ -148,7 +148,7 @@
       </details>
       <div class="pnote">
         확인 방법: ① <b>⚡ 빠른 학습</b> → 곡선이 50%에서 위로 오르는지 ② <b>⚔️ 학습 로봇 vs 미학습 로봇</b>으로 실제 경기를 눈으로 ③ <b>🔬 지금 검증</b>으로 대조군(50%)과 비교<br>
-        보상: 받으면 <b id="pHit"></b> · 넘기면 <b id="pOver"></b> · 이기면 <b id="pWin"></b> · 지면 <b id="pLose"></b> · 아무도 못 건드린 판은 <b>무득점</b><br>
+        보상: 받으면 <b id="pHit"></b> · 넘기면 <b id="pOver"></b> · 이기면 <b id="pWin"></b> · 지면 <b id="pLose"></b> · 아무도 못 건드린 판은 <b>무득점 + 서브 교대</b><br>
         평가 = 학습 로봇을 복사해 <b>학습 정지·탐험 없음(ε=0)</b>으로 미학습 로봇과 <b>100점</b>(진영 반반 교대) 대결. 실력이 같으면 50%가 정상입니다.<br>
         축별 Q-러닝 TD(0) · α=<b id="pAlpha"></b> · γ=<b id="pGamma"></b> · Q-테이블 상태 수: x <b id="nX">0</b> / y <b id="nY">0</b> / z <b id="nZ">0</b> / 손목 <b id="nP">0</b>·<b id="nW">0</b> · 평균 |TD오차| <b id="tdErr">–</b>
       </div>
@@ -224,10 +224,11 @@ const CFG={
   epsStart:1.0,      // 처음엔 100% 무작위(=미학습)
   epsMin:0.05,       // 탐험 하한
   epsDecay:0.998,    // 에피소드(포인트)마다 ε×0.998
-  rHit:+0.3,         // 보상: 공을 받으면(라켓에 닿음)
-  rOver:+0.5,        // 보상: 공을 넘기면(네트를 넘어 상대 코트에 들어감)
-  rWin:+3,           // 보상: 포인트를 이기면 (받기·넘기기보다 훨씬 크게)
-  rLose:-1,          // 보상: 포인트를 지면 — 없으면 정책이 자주 무너져서(실측) 추가
+  rHit:+30,          // 보상: 공을 받으면(라켓에 닿음)
+  rOver:+50,         // 보상: 공을 넘기면(네트를 넘어 상대 코트에 들어감)
+  rWin:+100,         // 보상: 포인트를 이기면 (받기·넘기기보다 크게)
+  rLose:-100,        // 보상: 포인트를 지면
+  // 받기·넘기기를 승패보다 너무 작게(예: 1·5) 하면 승패 잡음에 묻혀 '받기'를 못 배우는 시드가 많음(실측)
 };
 
 // ===== 행동: 팔 끝 이동 3축(목표 속도 5단계) + 손목 각도 2축(목표 각도 5단계), 축마다 독립 =====
@@ -334,7 +335,7 @@ class Match {
     this.p1=makePlayer(-1, brainBlue);
     this.p2=makePlayer( 1, brainRed);
     this.firstServer=this.p1;                 // 이번 세트 첫 서버 (세트마다 교대)
-    this.points=0; this.caps=0; this.voids=0; this.rally=0; this.rallyHist=[]; this.tick=0;
+    this.points=0; this.caps=0; this.voids=0; this.voidFlip=0; this.rally=0; this.rallyHist=[]; this.tick=0;
     this.hist=Array.from({length:HIST},()=>({x:0,y:0,z:0,vx:0,vy:0,vz:0,canReturn:false}));
     this.hHead=0; this.hLen=0;
     this.newPoint(this.currentServer());
@@ -347,7 +348,8 @@ class Match {
     const deuce = p1.score>=WIN_POINTS-1 && p2.score>=WIN_POINTS-1;
     const idx = deuce ? (pts%2) : (Math.floor(pts/2)%2);
     const other = this.firstServer===p1?p2:p1;
-    return idx===0 ? this.firstServer : other;
+    const s = idx===0 ? this.firstServer : other;
+    return this.voidFlip ? (s===p1?p2:p1) : s;      // 무득점 판이 나올 때마다 서브 차례가 상대에게 넘어감
   }
   // ===== 포인트 시작(서브) — 서브 자체는 학습 대상 아님 =====
   newPoint(server){
@@ -482,8 +484,9 @@ class Match {
     b.over=true;
     this.points++; this.rallyHist.push(this.rally); if(this.rallyHist.length>200) this.rallyHist.shift();
     if(reason==='winner') loser.misses++;                       // 받을 차례인데 못 받음
-    if(!b.touched){                                             // 아무도 공을 건드리지 못함 → 무득점(서브는 같은 사람이 다시)
+    if(!b.touched){                                             // 아무도 공을 건드리지 못함 → 무득점, 서브(턴)는 상대에게
       this.voids++;
+      this.voidFlip^=1;
       this.settle(null, true);
       this.emit('void', loser, {reason, detail});
       this.newPoint(this.currentServer());
@@ -801,7 +804,7 @@ const hooks={
   smash:p=>spawnBurst(p.colorHex),
   toast:(txt,color)=>showToast(txt,color),
   set:p=>showToast(nameOf(p)+' 세트 승리! 🏆', p.color),
-  void:(rcv)=>{ showToast('🚫 아무도 못 건드림 · 무득점', rcv.color); fbEl.textContent='📋 무득점: '+nameOf(rcv)+'이(가) 서브를 건드리지 못함 — 이 판은 누구도 점수 없음'; uiDirty=true; },
+  void:(rcv)=>{ showToast('🚫 아무도 못 건드림 · 무득점 · 서브 교대', rcv.color); fbEl.textContent='📋 무득점: '+nameOf(rcv)+'이(가) 서브를 건드리지 못함 — 점수 없이 서브 차례가 넘어감'; uiDirty=true; },
   point:(winner,loser,info)=>{
     if(info.smashWinner) showToast(nameOf(winner)+' 💥 스매시 위너!'+(info.combo?' '+(info.combo+1)+'연타!':''), winner.color);
     else showToast(nameOf(winner)+' 득점 +1  ·  '+(info.reason==='fault'?({net:'🕸️ 네트',short:'짧음',out:'아웃'}[info.detail]||'상대 실책'):'위너샷'), winner.color);
