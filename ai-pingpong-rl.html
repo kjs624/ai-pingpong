@@ -444,13 +444,14 @@ function faceAxes(p){
 
 // ===== 경기(환경): 물리 + 실제 탁구 규칙 + 두 로봇의 결정·학습 =====
 class Match {
-  // opt.drill: 🎾 볼 머신 테스트 — p1(블루)만 로봇, p2 자리는 공을 쏘는 볼 머신. {maxBalls, loop}
+  // opt.drill: 🎾 볼 머신 테스트 — p1(블루)만 로봇, p2 자리는 공을 쏘는 볼 머신. {maxBalls, loop, learn}
+  //   learn: Q-러닝 뇌가 볼 머신에서도 같은 보상표로 학습(넘기기 보상 + 끝날 때 settle). 🪜 커리큘럼용
   constructor(brainBlue, brainRed, hooks, opt){
     this.h=hooks||null;                       // 화면 효과 콜백(토스트·파티클). 헤드리스면 null
     this.p1=makePlayer(-1, brainBlue);
     this.p2=makePlayer( 1, brainRed);
     const dr=opt&&opt.drill;
-    this.drill = dr ? {streak:0, score:0, balls:0, level:1, speed:0, done:false, maxBalls:dr.maxBalls||Infinity, loop:!!dr.loop,
+    this.drill = dr ? {streak:0, score:0, balls:0, level:1, speed:0, done:false, maxBalls:dr.maxBalls||Infinity, loop:!!dr.loop, learn:!!dr.learn,
                        runs:0, best:0, bestScore:0, lastStreak:null, lastScore:null, lastShaping:0, minDist:Infinity, touchedBall:false} : null;
     this.firstServer=this.p1;                 // 이번 세트 첫 서버 (세트마다 교대)
     this.points=0; this.caps=0; this.voids=0; this.voidFlip=0; this.rally=0; this.rallyHist=[]; this.tick=0;
@@ -658,7 +659,10 @@ class Match {
     const b=this.b;
     if(b.over) return;
     b.over=true;
-    if(this.drill){ this.endDrill(detail); return; }       // 🎾 연속이 끊김 → 테스트 종료(점수 기록)
+    if(this.drill){                                         // 🎾 연속이 끊김 → 테스트 종료(점수 기록)
+      if(this.drill.learn) this.settle(detail==='block'?null:winner, true, loser);   // 🪜 셀프플레이와 같은 보상으로 정산(못 받으면 지는 것)
+      this.endDrill(detail); return;
+    }
     this.points++; this.rallyHist.push(this.rally); if(this.rallyHist.length>200) this.rallyHist.shift();
     if(reason==='winner') loser.misses++;                       // 받을 차례인데 못 받음
     if(!b.touched || detail==='block'){                         // 아무도 공을 못 건드림 / 튀기 전에 라켓에 맞음 → 무득점, 서브(턴)는 상대에게
@@ -725,9 +729,11 @@ class Match {
         b.serve=false;               // 리시버 코트 바운스 = 서브 완료, 랠리 시작
         b.bounceOnExpect++;
         if(this.drill && b.lastHitter===p1 && b.bounceOnExpect===1){   // 🎾 받아서 넘김 성공 → 점수(그 공의 속도 배율) 쌓고 다음 공
-          const d=this.drill; d.streak++; d.score+=d.level; p1.overs++; p1.flight=false;
+          const d=this.drill;
+          if(d.learn) drillOverReward(p1, d.streak);                    // 🪜 넘기기 보상(랠리 보너스: 연속 개수를 주고받기 횟수로)
+          d.streak++; d.score+=d.level; p1.overs++; p1.flight=false;
           this.emit('drillHit', d);
-          if(d.streak>=d.maxBalls){ b.over=true; this.endDrill('max'); return; }
+          if(d.streak>=d.maxBalls){ b.over=true; if(d.learn) this.settle(null, false); this.endDrill('max'); return; }
           this.launch(); return;
         }
         if(b.bounceOnExpect===1){
@@ -1002,6 +1008,62 @@ registerMethod({
   summary(L){
     const h=L.evo.history.at(-1);
     return h ? '마지막 세대: 최고 점수 '+h.best.toFixed(2)+' · 평균 '+h.mean.toFixed(2)+' · 최고 개체 연속 평균 '+h.bestAvgStreak.toFixed(1)+'개' : '아직 세대가 끝나지 않음';
+  },
+});
+
+// ── 방법: curriculum — 🪜 Q-러닝: 🎾 볼 머신으로 먼저 연습 → 셀프플레이 ──
+// 볼 머신 단계: p1만 Q 뇌, p2 자리는 볼 머신(학습 안 함). 보상표는 셀프플레이와 같음
+//   받기 +45 · 넘기기 +75(+랠리 보너스: 연속 개수를 주고받기 횟수로) · 못 받거나 실책이면 지기 −80 · 튀기 전 막기는 무득점(rVoidMiss)
+// 넘어가는 조건: 볼 머신 받기가 최근 window(100)공에서 need(60%)를 넘으면 셀프플레이로. 못 넘어도 maxDrill(1000)판이면 넘어감
+//   opt.switchAt>0이면 그 판 수에서 고정 전환(비교용). 넘어갈 때 ε를 epsSwitch(0.5) 이상으로 올림:
+//   볼 머신 공과 서브·상대 타구는 관측 상태가 달라서, ε가 바닥(0.05)인 채로 넘어가면 셀프플레이 탐험이 모자라 무너지는 시드가 많았음(실측)
+// 볼 머신 공도 로봇에게 날아온 공이라 경험(brain.balls)에 그대로 들어감
+function drillOverReward(p, streak){
+  const bonus=Math.min(CFG.rallyMax, CFG.rallyBase*Math.pow(CFG.rallyGrow, streak));
+  p.ret+=CFG.rOver+bonus;
+  if(p.swingPend){ p.swingPend.r+=CFG.rOver+bonus; p.swingPend.ready=true; }
+}
+function makeCurriculum(opt){
+  opt=opt||{};
+  const win=opt.window||100, need=opt.need==null?0.6:opt.need, switchAt=opt.switchAt||0, maxDrill=opt.maxDrill||1000, epsSwitch=opt.epsSwitch==null?0.5:opt.epsSwitch;
+  const br=makeBrain();
+  let match=null, phase='drill', recent=[], recentHits=0, hits0=0, started=false, switched=null;
+  const hooks={ launch(){                                   // 새 공을 쏠 때 직전 공을 받았는지 기록(최근 win공)
+    const h=match?match.p1.hits:0;
+    if(started){ const ok=h>hits0?1:0; recent.push(ok); recentHits+=ok; if(recent.length>win) recentHits-=recent.shift(); }
+    hits0=h; started=true;
+  } };
+  const rate=()=>recent.length? recentHits/recent.length : 0;
+  function ensure(){
+    if(match) return;
+    match=new Match(br, MACHINE, hooks, {drill:{loop:true, learn:true}});
+  }
+  function maybeSwitch(){
+    if(phase!=='drill') return;
+    const go = switchAt ? br.episodes>=switchAt : ((recent.length>=win && rate()>need) || br.episodes>=maxDrill);
+    if(!go) return;
+    phase='self'; switched={episodes:br.episodes, balls:br.balls, rate:rate(), eps:br.eps};
+    if(epsSwitch>0) br.eps=Math.max(br.eps, epsSwitch);        // 새 과제(상대 로봇 타구·서브)라 탐험을 다시 늘림
+    match=new Match(br, br);
+  }
+  function step(){ ensure(); match.step(); maybeSwitch(); }
+  return {
+    unit:'판', brain:()=>br, progress:()=>br.episodes, balls:()=>br.balls,
+    phase:()=>phase, drillRate:rate, switched:()=>switched,
+    run(n){ for(let i=0;i<n;i++) step(); },
+    trainTo(n){ let guard=0; const lim=Math.max(0,n-br.episodes)*20000; while(br.episodes<n && guard++<lim) step(); },
+    label:()=>br.episodes+'판'+(phase==='drill'?' 🎾'+Math.round(100*rate())+'%':''),
+  };
+}
+registerMethod({
+  id:'curriculum', icon:'🪜', name:'커리큘럼(볼 머신 → 셀프플레이)', color:'#9b6bd6',
+  note:'같은 Q-러닝 뇌가 먼저 🎾 볼 머신의 느린 공으로 같은 보상표를 받으며 연습하고, 최근 100공 받기가 60%를 넘으면(못 넘으면 1000판에) 셀프플레이로 넘어가며 탐험(ε)을 0.5로 되올림(볼 머신 공도 경험에 포함).',
+  defaultTrain:5000, checkpoints:[0,250,500,1000,1500,2000,3000,5000,8000,12000,20000],
+  create(opt){ return makeCurriculum(opt); },
+  summary(L){
+    const br=L.brain(), sc=stateCounts(br), sw=L.switched();
+    return (sw ? '셀프플레이 전환: '+sw.episodes+'판 · 공 '+sw.balls+'개 · 볼 머신 받기 '+(100*sw.rate).toFixed(0)+'%' : '아직 볼 머신 단계(받기 '+(100*L.drillRate()).toFixed(0)+'%)')+
+      ' · Q-테이블 상태 수: x '+sc.x+' · y '+sc.y+' · z '+sc.z+' · 손목 위아래 '+sc.p+' · 손목 좌우 '+sc.w;
   },
 });
 
