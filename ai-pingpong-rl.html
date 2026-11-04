@@ -100,7 +100,9 @@
   #evoCurve { width:100%; height:150px; display:block; background:#0b1222; border-radius:8px; touch-action:none; }
   #evoTip { position:absolute; pointer-events:none; display:none; background:#e8eefc; color:#0b1222; border-radius:6px; padding:5px 8px; font-size:11px; line-height:1.4; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.45); }
   #evoTip .k, .legend .k { display:inline-block; width:12px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; }
-  .legend { display:flex; gap:14px; margin:6px 0 2px; color:#9fb0d0; font-size:11px; }
+  .legend { display:flex; flex-wrap:wrap; gap:4px 14px; margin:6px 0 2px; color:#9fb0d0; font-size:11px; }
+  .legend > span { white-space:nowrap; }
+  .cmpgrid .sub { display:block; color:#8a9bbd; font-size:10px; }   /* 비교 표 경험 칸 둘째 줄(판·세대) */
   .kRL { background:#3987e5; } .kEV { background:#d95926; }
   .cmpgrid { width:100%; border-collapse:collapse; font-size:11.5px; margin-top:6px; font-variant-numeric:tabular-nums; }
   .cmpgrid th { color:#9fb0d0; font-weight:600; text-align:right; padding:3px 4px; border-bottom:1px solid #1e2a40; }
@@ -1993,7 +1995,7 @@ function runCmp(budgetMs){
 // 범례·표·설명을 방법 목록으로 만듦 (cell = 표의 칸 DOM)
 function buildCmpRows(){
   const esc=t=>String(t).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  document.getElementById('cmpLegend').innerHTML=cmpItems.map(it=>'<span><span class="k" style="background:'+it.def.color+'"></span>'+it.def.icon+' '+esc(it.def.name)+'</span>').join('');
+  document.getElementById('cmpLegend').innerHTML=cmpItems.map(it=>'<span title="'+esc(it.def.name)+'"><span class="k" style="background:'+it.def.color+'"></span>'+it.def.icon+' '+esc(shortOf(it.def))+'</span>').join('');
   document.getElementById('cmpNotes').innerHTML=cmpItems.map(it=>'<b>'+it.def.icon+' '+esc(it.def.name)+'</b>: '+esc(it.def.note)+'<br>').join('');
   const tb=document.getElementById('cmpRows'); tb.textContent='';
   for(const it of cmpItems){
@@ -2108,7 +2110,7 @@ function renderEvoStats(){
   if(!cmpItems) return;
   for(const it of cmpItems){
     const c=it.cells, last=it.curve.at(-1);
-    c[0].textContent='공 '+it.L.balls()+' · '+it.L.label();
+    c[0].innerHTML='공 '+it.L.balls()+'<span class="sub">'+it.L.label()+'</span>';   // 두 줄: 공 수 / 방법의 진행 단위
     c[1].textContent=last?pctR(last.win):'–'; c[2].textContent=last?pctR(last.ret):'–'; c[3].textContent=last?pctR(last.over):'–';
   }
   cmpStatus.textContent=(cmpRun?'학습 중… ':'정지됨 · ')+'학습 방법 '+cmpItems.length+'개'+(cmpJobs.length?' · 평가 중…':'');
