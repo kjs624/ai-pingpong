@@ -102,6 +102,7 @@
   #evoTip .k, .legend .k { display:inline-block; width:12px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; }
   .legend { display:flex; gap:14px; margin:6px 0 2px; color:#9fb0d0; font-size:11px; }
   .kRL { background:#3987e5; } .kEV { background:#d95926; }
+  .kES { background:#e0a400; } .kESm { background:repeating-linear-gradient(90deg,#e0a400 0 4px,transparent 4px 7px); }
   .cmpgrid { width:100%; border-collapse:collapse; font-size:11.5px; margin-top:6px; font-variant-numeric:tabular-nums; }
   .cmpgrid th { color:#9fb0d0; font-weight:600; text-align:right; padding:3px 4px; border-bottom:1px solid #1e2a40; }
   .cmpgrid td { text-align:right; padding:3px 4px; border-bottom:1px solid #1e2a40; white-space:nowrap; }
@@ -159,13 +160,15 @@
   </div>
 
   <div id="evoMainPanel">
-    <div class="ph"><b>🧬 자연 선택 진화</b></div>
-    <div class="ptitle">각 개체가 <b>🎾 볼 머신 테스트</b>(무작위로 날아오는 공을 연속으로 받아 넘기기, 성공할수록 빨라지고 넓어짐, 한 번 실패하면 끝)를 12번 → 점수 상위 <b id="survPct">25%</b>만 살아남음 → 생존자를 <b>돌연변이</b>시켜 자식 세대 → 반복</div>
+    <div class="ph"><b id="evoTitle">🧬 자연 선택 진화</b></div>
+    <div class="seg" id="evoKindSeg"><button data-k="ga" class="on">🧬 유전 알고리즘</button><button data-k="es">🧭 진화 전략</button></div>
+    <div class="ptitle" id="evoDescES" style="display:none">중심 신경망 하나에 잡음을 ± 대칭으로 더한 <b>24</b>개체가 각자 <b>🎾 볼 머신 테스트</b> 12번 → 점수를 <b>순위</b>로 바꿔 "어느 쪽 잡음이 더 잘했나"로 중심이 나아갈 방향을 추정 → 중심을 조금 옮기고 반복 (σ <b id="esSigma"></b> · α <b id="esAlpha"></b>)</div>
+    <div class="ptitle" id="evoDescGA">각 개체가 <b>🎾 볼 머신 테스트</b>(무작위로 날아오는 공을 연속으로 받아 넘기기, 성공할수록 빨라지고 넓어짐, 한 번 실패하면 끝)를 12번 → 점수 상위 <b id="survPct">25%</b>만 살아남음 → 생존자를 <b>돌연변이</b>시켜 자식 세대 → 반복</div>
     <div class="pbtns"><button id="evoRunBtn" class="primary">▶ 진화 시작</button><button id="evoResetBtn">↺ 처음부터</button></div>
-    <div class="seg" id="survSeg"><button data-s="0.1">생존 10%</button><button data-s="0.25" class="on">생존 25%</button><button data-s="0.5">생존 50%</button></div>
+    <div class="seg" id="survSeg" style="margin-top:6px"><button data-s="0.1">생존 10%</button><button data-s="0.25" class="on">생존 25%</button><button data-s="0.5">생존 50%</button></div>
     <div id="evoStatus" class="pnote" style="margin-top:4px"></div>
     <div class="ptitle">세대별 볼 머신 테스트 점수 (평균. 점수 = 연속 성공한 공마다 그 공의 속도 배율 합)</div>
-    <div class="legend"><span><span class="k kEV"></span>세대 최고 개체</span><span><span class="k kMean"></span>세대 평균</span></div>
+    <div class="legend"><span><span class="k kEV"></span>세대 최고 개체</span><span><span class="k kMean"></span>세대 평균</span><span class="esLeg" style="display:none"><span class="k kES"></span>🧭 진화 전략 최고 개체</span><span class="esLeg" style="display:none"><span class="k kESm"></span>🧭 진화 전략 평균</span></div>
     <div class="chartWrap">
       <canvas id="evoFitCurve" aria-label="세대별 볼 머신 테스트 최고·평균 점수"></canvas>
       <div id="evoFitTip"></div>
@@ -175,14 +178,14 @@
         <tr><td>세대 · 경험</td><td id="eGen">–</td></tr>
         <tr><td>최고 / 평균 점수</td><td id="eFit">–</td></tr>
         <tr><td>최고 개체 연속 받기 (평균 / 최고)</td><td id="eVsPrev">–</td></tr>
-        <tr><td>최고 개체 vs 미학습 로봇 (받기 · 승률)</td><td id="eVsU">–</td></tr>
+        <tr><td id="evoVsULbl">최고 개체 vs 미학습 로봇 (받기 · 승률)</td><td id="eVsU">–</td></tr>
       </tbody>
     </table>
     <div class="pbtns"><button id="evoDuelBtn">🎾 3D: 최고 개체 볼 머신 테스트</button></div>
     <div class="pnote">
       뇌 = 작은 신경망(관측 16 → 은닉 12 → 팔 3축·손목 2축). 한 세대 <b>24</b>개체, 각자 볼 머신 테스트 12번의 평균 점수로 선택.
       처음엔 모두 0점이라 고를 수 없어서, 선택할 때만 마지막 공에 닿았거나 가까웠던 만큼 최대 +0.5를 더합니다(화면 점수에는 안 들어감).<br>
-      3D 화면: 🔵 블루 = 현재 세대 최고 개체, 🔴 레드 자리 = 볼 머신. 진화는 이 탭을 떠나도 계속 진행됩니다.
+      3D 화면: 🔵 블루 = <span id="evo3dWho">현재 세대 최고 개체</span>, 🔴 레드 자리 = 볼 머신. 진화는 이 탭을 떠나도 계속 진행됩니다.
     </div>
   </div>
 
@@ -1005,6 +1008,79 @@ registerMethod({
   },
 });
 
+// ── 방법: es — 🧭 진화 전략(OpenAI-ES): 볼 머신 점수 순위로 중심 가중치가 나아갈 방향을 추정 ──
+//  신경망(16→12→5)·볼 머신 테스트·세대 크기(24)·개체당 테스트 횟수(12)·적합도(점수+가산점)는 유전 알고리즘(Evolution)과 같고,
+//  다음 세대 만드는 법(nextGen)과 개체 만드는 법(sample)만 다르다.
+//  ① 중심 가중치 w 하나  ② 잡음 ε_i ~ N(0,1) 12개 → w+σε_i, w−σε_i 24개체(대칭 표본)
+//  ③ 각 개체의 볼 머신 적합도 → 순위 점수(꼴찌 −0.5 … 1등 +0.5)
+//  ④ w ← w + α·Σ_i (순위(w+σε_i) − 순위(w−σε_i))·ε_i / (n·σ)   (n = 개체 수 24)
+//  순위로 바꾸므로 운 좋게 크게 나온 점수 하나가 방향을 흔들지 못하고, 점수가 세대마다 커져도 걸음 크기는 α로 일정하다.
+//  첫 세대(0세대)만 유전 알고리즘과 똑같이 무작위 뇌 24개를 재고, 그중 최고를 첫 중심으로 삼는다(opt.init='rand'면 무작위 뇌 하나에서 시작).
+//    → 무작위 한 점에서 시작하면 시드에 따라 공을 하나도 못 받는 곳에서 기울기 신호 없이 맴돌았다(시드 3: 3만 공까지 점수 0).
+//  bestBrain() = 중심 w. 그 세대 최고 개체는 24개 중 12번 테스트 평균이 가장 운 좋게 나온 개체라 실제보다 좋아 보이고,
+//    중심은 24개체 모두의 점수로 옮겨진 뇌(ES가 실제로 학습하는 값)다. 실측(시드 1~3, 같은 공 수)에서 볼 머신 점수는 둘이 비슷했다(PR 본문).
+const ES_SIGMA=0.1, ES_ALPHA=0.05;   // σ 0.1·0.25 × α 0.02·0.05 를 훑어 고른 기본값(PR 본문)
+function esGauss(){ let u=0; while(u===0) u=rand(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*rand()); }   // 표준정규 N(0,1) (Box-Muller). randn()은 표준편차 0.45라 ES 공식에 안 맞음
+class EvoStrategy extends Evolution {
+  constructor(opt){
+    opt=opt||{};
+    super(Object.assign({}, opt, {size:2*Math.round((opt.size||24)/2)}));   // 대칭 표본이라 짝수. 0세대 = 무작위 뇌 24개(Evolution과 같음)
+    this.kind='es';
+    this.sigma=opt.sigma||ES_SIGMA; this.alpha=opt.alpha||ES_ALPHA; this.init=opt.init||'best';
+    this.center=this.pop[0].w.slice(); this.eps=null;
+    if(this.init==='rand') this.sample();
+  }
+  // 중심 주변에 대칭 표본 24개체: pop[2i]=w+σε_i, pop[2i+1]=w−σε_i
+  sample(){
+    const n=this.size/2, w=this.center, s=this.sigma;
+    this.eps=[]; this.pop=[];
+    for(let i=0;i<n;i++){
+      const e=new Array(NN_SIZE), a=new Array(NN_SIZE), b=new Array(NN_SIZE);
+      for(let k=0;k<NN_SIZE;k++){ e[k]=esGauss(); a[k]=w[k]+s*e[k]; b[k]=w[k]-s*e[k]; }
+      this.eps.push(e);
+      this.pop.push({w:a, fit:0, n:0, streak:0}, {w:b, fit:0, n:0, streak:0});
+    }
+    this.startGen();
+  }
+  nextGen(){
+    const pop=this.pop, N=pop.length; pop.forEach(g=>{ g.score=g.n? g.fit/g.n : 0; g.avgStreak=g.n? g.streakSum/g.n : 0; });
+    const ord=pop.map((g,i)=>i).sort((a,b)=>pop[a].score-pop[b].score), rk=new Array(N);   // 순위 점수(같은 점수는 순위 평균)
+    for(let i=0;i<N;){ let j=i; while(j+1<N && pop[ord[j+1]].score===pop[ord[i]].score) j++; for(let t=i;t<=j;t++) rk[ord[t]]=(i+j)/2/(N-1)-0.5; i=j+1; }
+    const top=pop[ord[N-1]];
+    this.best=top.w.slice(); this.bestFit=top.score;   // 그 세대 최고 개체(기록용)
+    this.history.push({gen:this.gen, points:this.points, best:top.score, mean:pop.reduce((a,g)=>a+g.score,0)/N,
+      bestStreak:top.streak, bestAvgStreak:top.avgStreak});
+    if(!this.eps) this.center=top.w.slice();           // 0세대(무작위 24개) → 최고를 첫 중심으로
+    else {
+      const w=this.center, step=this.alpha/(N*this.sigma);
+      for(let i=0;i<this.eps.length;i++){
+        const d=(rk[2*i]-rk[2*i+1])*step, e=this.eps[i];
+        if(d) for(let k=0;k<NN_SIZE;k++) w[k]+=d*e[k];
+      }
+    }
+    this.gen++; this.sample();
+  }
+  bestBrain(){ return makeNNBrain(this.center.slice()); }
+}
+registerMethod({
+  id:'es', icon:'🧭', name:'진화 전략(OpenAI-ES)', color:'#e0a400', Strategy:EvoStrategy,
+  note:'중심 신경망 하나 주변에 잡음을 ± 대칭으로 더한 24개체를 볼 머신으로 재고, 점수 순위로 "어느 쪽으로 가면 나아지나"를 추정해 중심을 조금씩 옮김(σ='+ES_SIGMA+', α='+ES_ALPHA+'). 평가하는 뇌는 중심. 실측(시드 1~3): 같은 공 수에서 볼 머신 점수는 아직 유전 알고리즘보다 낮음.',
+  defaultTrain:30, checkpoints:[0,2,5,10,15,20,30,40,60,80,120],
+  create(opt){
+    const evo=new EvoStrategy(opt);
+    return {
+      unit:'세대', evo, brain:()=>evo.bestBrain(), progress:()=>evo.gen, balls:()=>evo.points,
+      run(n){ evo.run(n); },
+      trainTo(g){ while(evo.gen<g) evo.run(1e6); },
+      label:()=>evo.gen+'세대',
+    };
+  },
+  summary(L){
+    const h=L.evo.history.at(-1);
+    return h ? '마지막 세대: 최고 개체 점수 '+h.best.toFixed(2)+' · 평균 '+h.mean.toFixed(2)+' · σ='+L.evo.sigma+' · α='+L.evo.alpha : '아직 세대가 끝나지 않음';
+  },
+});
+
 function stateCounts(brain){ const c={}; AXES.forEach(ax=>c[ax]=Object.keys(brain.q[ax]||{}).length); return c; }
 
 root.PongRL={ Match, EvalJob, Evolution, MACHINE, METHODS, registerMethod, getMethod, makeNNBrain, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
@@ -1195,7 +1271,7 @@ function setMode(m){
   mode=m;
   if(m==='evoMain'){
     // 🧬 진화 탭: 블루 = 현재 세대 최고 개체가 🎾 볼 머신 테스트(실패하면 점수 남기고 다시 시작)
-    duelMain={gen:evoMain.gen};
+    duelMain={gen:evoMain.gen, es:evoKind==='es'};
     game=new Match(evoMain.bestBrain(), MACHINE, hooks, {drill:{loop:true}});
   } else if(m==='evo'){
     // ⚖️ 비교 화면: 블루 = 목록 첫 번째 방법, 레드 = 두 번째 방법 (둘 다 복사본, 학습 정지·ε=0)
@@ -1215,7 +1291,7 @@ function setMode(m){
 }
 function nameOf(p){
   if(mode==='evo') return p===game.p1? duelInfo.aIcon+' '+duelInfo.aName : duelInfo.bIcon+' '+duelInfo.bName;
-  if(mode==='evoMain') return p===game.p1?'🧬 최고 개체':'🎾 볼 머신';
+  if(mode==='evoMain') return p===game.p1?(evoKind==='es'?'🧭 중심 뇌':'🧬 최고 개체'):'🎾 볼 머신';
   if(mode==='verify') return p===game.p1?'🎓 학습 로봇':'🐣 미학습 로봇';
   return p===game.p1?'🔵 블루':'🔴 레드';
 }
@@ -1299,7 +1375,7 @@ function updateUI(){
   g1.textContent=p1.games; g2.textContent=p2.games;
   sm1.textContent=p1.smashWins; sv1.textContent=p1.saves; er1.textContent=p1.err; rt1.textContent=pct(p1.hits,p1.hits+p1.misses); ov1.textContent=pct(p1.overs,p1.hits);
   sm2.textContent=p2.smashWins; sv2.textContent=p2.saves; er2.textContent=p2.err; rt2.textContent=pct(p2.hits,p2.hits+p2.misses); ov2.textContent=pct(p2.overs,p2.hits);
-  n1.textContent = mode==='evoMain' ? '🧬 '+duelMain.gen+'세대 최고' : mode==='evo' ? duelInfo.a : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
+  n1.textContent = mode==='evoMain' ? (duelMain.es?'🧭 '+duelMain.gen+'세대 중심':'🧬 '+duelMain.gen+'세대 최고') : mode==='evo' ? duelInfo.a : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
   n2.textContent = mode==='evoMain' ? '볼 머신 🎾' : mode==='evo' ? duelInfo.b : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
   setn.textContent=p1.games+p2.games+1;
   const b=game.b;
@@ -1363,7 +1439,7 @@ function runJobs(budgetMs){
       }
     } else if(evoMainJobs.length){
       const e=evoMainJobs[0];
-      if(e.job.run(400)){ evoMainJobs.shift(); const h=evoMain.history.find(x=>x.gen===e.gen); if(h) h.vsU=e.job.r; renderEvoMain(); }
+      if(e.job.run(400)){ evoMainJobs.shift(); const h=e.evo.history.find(x=>x.gen===e.gen); if(h) h.vsU=e.job.r; renderEvoMain(); }
     } else if(cmpJobs.length){
       const e=cmpJobs[0];
       if(e.job.run(400)){
@@ -1606,9 +1682,13 @@ function setScreen(scr){
 // =====================================================================
 //  🧬 진화 탭: 전 세대 생존자와 경기 → 상위 생존 → 돌연변이 자식 (Evolution, 백그라운드에서 조금씩 실행)
 // =====================================================================
-let evoMain=null, evoMainRun=false, evoMainJobs=[], evoSurvive=0.25, duelMain={gen:0}, fitHover=null;
+//  🧬 유전 알고리즘 / 🧭 진화 전략 선택: 두 방식은 따로 진행(evoGA·evoES)하고, evoMain = 지금 고른 쪽. 곡선에는 둘 다 그림
+const EvoStrategy=PongRL.getMethod('es').Strategy, C_ES='#e0a400';
+let evoMain=null, evoGA=null, evoES=null, evoKind='ga', evoMainRun=false, evoMainJobs=[], evoSurvive=0.25, duelMain={gen:0}, fitHover=null;
 function resetEvoMain(){
-  evoMain=new Evolution({survive:evoSurvive}); evoMainJobs=[]; evoMainRun=false; updateEvoRunBtn();
+  if(evoKind==='es') evoMain=evoES=new EvoStrategy();
+  else evoMain=evoGA=new Evolution({survive:evoSurvive});
+  evoMainJobs=evoMainJobs.filter(e=>e.evo===evoGA || e.evo===evoES);   // 버린 쪽의 평가만 취소 evoMainRun=false; updateEvoRunBtn();
   if(curScreen==='evo') setMode('evoMain');
   renderEvoMain();
 }
@@ -1617,10 +1697,25 @@ function runEvoMain(budgetMs){
   while(performance.now()-t0<budgetMs){
     if(evoMain.run(300)){                              // 한 세대가 끝남
       const h=evoMain.history.at(-1);
-      if(h.gen%2===0 && evoMainJobs.length<3) evoMainJobs.push({gen:h.gen, job:new EvalJob(evoMain.bestBrain(), UNTRAINED, EVAL_POINTS)});
+      if(h.gen%2===0 && evoMainJobs.length<3) evoMainJobs.push({evo:evoMain, gen:h.gen, job:new EvalJob(evoMain.bestBrain(), UNTRAINED, EVAL_POINTS)});
       renderEvoMain();
     }
   }
+}
+function setEvoKind(k){
+  const $=id=>document.getElementById(id);
+  evoKind=k; evoMain = k==='es' ? evoES : evoGA;
+  if(!evoMain) resetEvoMain();
+  document.querySelectorAll('#evoKindSeg button').forEach(x=>x.classList.toggle('on', x.dataset.k===k));
+  $('evoTitle').textContent = k==='es' ? '🧭 진화 전략(OpenAI-ES)' : '🧬 자연 선택 진화';
+  $('evoDescGA').style.display = $('survSeg').style.display = k==='es' ? 'none' : '';
+  $('evoDescES').style.display = k==='es' ? '' : 'none';
+  $('evoVsULbl').textContent = k==='es' ? '중심 뇌 vs 미학습 로봇 (받기 · 승률)' : '최고 개체 vs 미학습 로봇 (받기 · 승률)';
+  if(k==='es'){ $('esSigma').textContent=evoMain.sigma; $('esAlpha').textContent=evoMain.alpha; }
+  $('evo3dWho').textContent = k==='es' ? '현재 중심 뇌(🧭 진화 전략)' : '현재 세대 최고 개체';
+  $('evoDuelBtn').textContent = k==='es' ? '🎾 3D: 중심 뇌 볼 머신 테스트' : '🎾 3D: 최고 개체 볼 머신 테스트';
+  if(curScreen==='evo') setMode('evoMain');
+  renderEvoMain();
 }
 function updateEvoRunBtn(){ const b=document.getElementById('evoRunBtn'); if(b) b.textContent=evoMainRun?'⏸ 진화 정지':'▶ 진화 시작'; }
 function renderEvoMainStats(){
@@ -1631,20 +1726,29 @@ function renderEvoMainStats(){
   eVsPrev.textContent=h ? h.bestAvgStreak.toFixed(1)+'개 / '+h.bestStreak+'개' : '–';
   eVsU.textContent=lastU? pctR(lastU.vsU.retA)+' · '+pctR(lastU.vsU.winRateA)+' ('+lastU.gen+'세대)' : '–';
   const done=evoMain.si/evoMain.sched.length;
+  if(evoKind==='es'){ evoStatus.textContent=(evoMainRun?'진화 전략 중… ':'정지됨 · ')+evoMain.gen+'세대 평가 '+Math.round(100*done)+'% · 중심 주변 '+evoMain.size+'개체(± 대칭 '+evoMain.size/2+'쌍)'; return; }
   evoStatus.textContent=(evoMainRun?'진화 중… ':'정지됨 · ')+evoMain.gen+'세대 평가 '+Math.round(100*done)+'% · 생존 '+Math.round(100*evoMain.survive)+'% ('+Math.max(2,Math.round(evoMain.size*evoMain.survive))+'/'+evoMain.size+'개체)';
 }
 function renderEvoMain(){ renderEvoMainStats(); drawFitCurve(); }
 const C_MEAN='#8a9bbd', C_EV='#d95926';   // 진화 탭 차트 색(최고 개체·평균)
 function fitGeom(){
   const cv=fitCanvas, W=cv.clientWidth||300, H=cv.clientHeight||150, L=40, Rp=36, T=10, B=20, pw=W-L-Rp, ph=H-T-B;
-  const hs=evoMain? evoMain.history : [];
+  const hs=evoSeries().flatMap(sr=>sr.evo.history);
   let lo=Math.min(0,...hs.map(h=>h.mean)), hi=Math.max(2,...hs.map(h=>h.best)); const pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
-  const maxG=Math.max(10, hs.length? hs.at(-1).gen : 0);
+  const maxG=Math.max(10, ...hs.map(h=>h.gen));
   return {W,H,L,T,pw,ph,maxG,lo,hi, X:g=>L+g/maxG*pw, Y:v=>T+(1-(v-lo)/(hi-lo))*ph};
+}
+// 곡선에 그릴 방식들: 🧬 유전 알고리즘(최고·평균), 🧭 진화 전략(최고·평균 점선) — 기록이 있는 쪽만
+function evoSeries(){
+  const out=[];
+  if(evoGA && evoGA.history.length) out.push({evo:evoGA, lines:[['mean',C_MEAN,false],['best',C_EV,false]]});
+  if(evoES && evoES.history.length) out.push({evo:evoES, lines:[['mean',C_ES,true],['best',C_ES,false]]});
+  return out;
 }
 function drawFitCurve(){
   const cv=fitCanvas; if(!cv || curScreen!=='evo') return;
-  const g=fitGeom(), dpr=Math.min(devicePixelRatio||1,2), hs=evoMain.history;
+  const g=fitGeom(), dpr=Math.min(devicePixelRatio||1,2), series=evoSeries(), hs=series.flatMap(sr=>sr.evo.history);
+  document.querySelectorAll('.esLeg').forEach(e=>e.style.display = evoES && evoES.history.length ? '' : 'none');
   if(cv.width!==Math.round(g.W*dpr) || cv.height!==Math.round(g.H*dpr)){ cv.width=Math.round(g.W*dpr); cv.height=Math.round(g.H*dpr); }
   const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,g.W,g.H);
   const ticks=[g.lo, 0, g.hi].filter((v,i,a)=>a.indexOf(v)===i && v>=g.lo && v<=g.hi)
@@ -1654,14 +1758,17 @@ function drawFitCurve(){
   c.textBaseline='top'; c.textAlign='left'; c.fillText('0세대', g.L, g.T+g.ph+5); c.textAlign='right'; c.fillText(g.maxG+'세대', g.L+g.pw, g.T+g.ph+5);
   if(!hs.length){ c.textAlign='center'; c.textBaseline='middle'; c.fillText('▶ 진화 시작을 누르면 세대마다 점이 찍힙니다', g.L+g.pw/2, g.T+g.ph/2); return; }
   const labels=[];
-  [['mean',C_MEAN],['best',C_EV]].forEach(([k,col])=>{
-    c.strokeStyle=col; c.lineWidth=2; c.lineJoin='round'; c.lineCap='round'; c.beginPath();
-    hs.forEach((h,i)=>{ const x=g.X(h.gen), y=g.Y(h[k]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
-    const l=hs.at(-1), x=g.X(l.gen), y=g.Y(l[k]);
-    c.fillStyle=C_SURF; c.beginPath(); c.arc(x,y,6,0,7); c.fill(); c.fillStyle=col; c.beginPath(); c.arc(x,y,4,0,7); c.fill();
-    labels.push({x,y,t:l[k].toFixed(1)});
+  series.forEach(sr=>{ const H=sr.evo.history; if(!H.length) return;
+    sr.lines.forEach(([k,col,dash])=>{
+      c.strokeStyle=col; c.lineWidth=2; c.lineJoin='round'; c.lineCap='round'; c.setLineDash(dash?[5,4]:[]); c.beginPath();
+      H.forEach((h,i)=>{ const x=g.X(h.gen), y=g.Y(h[k]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke(); c.setLineDash([]);
+      const l=H.at(-1), x=g.X(l.gen), y=g.Y(l[k]);
+      c.fillStyle=C_SURF; c.beginPath(); c.arc(x,y,6,0,7); c.fill(); c.fillStyle=col; c.beginPath(); c.arc(x,y,4,0,7); c.fill();
+      labels.push({x,y,t:l[k].toFixed(1)});
+    });
   });
-  if(Math.abs(labels[0].y-labels[1].y)<12){ const up=labels[0].y<=labels[1].y?0:1; labels[up].y-=7; labels[1-up].y+=7; }
+  labels.sort((a,b)=>a.y-b.y);   // 끝 숫자가 겹치지 않게 위아래로 벌림
+  for(let i=1;i<labels.length;i++) if(Math.abs(labels[i].x-labels[i-1].x)<40 && labels[i].y-labels[i-1].y<12){ labels[i-1].y-=7; labels[i].y+=7; }
   c.fillStyle=C_TEXT; c.font='600 11px "Segoe UI","Malgun Gothic",sans-serif'; c.textAlign='left'; c.textBaseline='middle';
   labels.forEach(l=>c.fillText(l.t, l.x+8, Math.min(g.T+g.ph-4, Math.max(g.T+4, l.y))));
   if(fitHover!=null){ const x=Math.round(g.X(fitHover))+0.5; c.strokeStyle=C_MUTED; c.lineWidth=1; c.beginPath(); c.moveTo(x,g.T); c.lineTo(x,g.T+g.ph); c.stroke(); }
@@ -1669,18 +1776,22 @@ function drawFitCurve(){
 function setupFitHover(){
   const tip=document.getElementById('evoFitTip');
   const show=clientX=>{
-    if(!evoMain || !evoMain.history.length) return;
+    const series=evoSeries().filter(sr=>sr.evo.history.length); if(!series.length) return;
     const g=fitGeom(), rect=fitCanvas.getBoundingClientRect(), v=(clientX-rect.left-g.L)/g.pw*g.maxG;
-    let h=evoMain.history[0]; evoMain.history.forEach(x=>{ if(Math.abs(x.gen-v)<Math.abs(h.gen-v)) h=x; });
-    fitHover=h.gen; drawFitCurve();
+    const all=series.flatMap(sr=>sr.evo.history.map(x=>x.gen));
+    let gen=all[0]; all.forEach(x=>{ if(Math.abs(x-v)<Math.abs(gen-v)) gen=x; });
+    fitHover=gen; drawFitCurve();
     tip.textContent='';
     const line=t=>{ const d=document.createElement('div'); d.innerHTML=t; tip.appendChild(d); };
-    line('<b>'+h.gen+'세대</b> · 공 '+h.points+'개');
-    line('<span class="k kEV"></span><b>'+h.best.toFixed(1)+'</b> 최고 개체 점수 (연속 평균 '+h.bestAvgStreak.toFixed(1)+' · 최고 '+h.bestStreak+')');
-    line('<span class="k kMean"></span><b>'+h.mean.toFixed(1)+'</b> 세대 평균 점수');
-    if(h.vsU) line('미학습 상대 받기 '+pctR(h.vsU.retA));
+    line('<b>'+gen+'세대</b>');
+    series.forEach(sr=>{ const h=sr.evo.history.find(x=>x.gen===gen); if(!h) return; const es=sr.evo===evoES;
+      if(series.length>1) line((es?'🧭 진화 전략':'🧬 유전 알고리즘')+' · 공 '+h.points+'개'); else line('공 '+h.points+'개');
+      line('<span class="k '+(es?'kES':'kEV')+'"></span><b>'+h.best.toFixed(1)+'</b> 최고 개체 점수 (연속 평균 '+h.bestAvgStreak.toFixed(1)+' · 최고 '+h.bestStreak+')');
+      line('<span class="k '+(es?'kESm':'kMean')+'"></span><b>'+h.mean.toFixed(1)+'</b> 세대 평균 점수');
+      if(h.vsU) line((es?'중심 뇌':'최고 개체')+' 미학습 상대 받기 '+pctR(h.vsU.retA));
+    });
     tip.style.display='block';
-    const x=g.X(h.gen), tw=tip.offsetWidth;
+    const x=g.X(gen), tw=tip.offsetWidth;
     tip.style.left=Math.max(0, x+12+tw<=g.W ? x+12 : x-12-tw)+'px'; tip.style.top=g.T+'px';
   };
   fitCanvas.addEventListener('pointermove', e=>show(e.clientX));
@@ -1836,8 +1947,9 @@ function boot(){
   $('evoRunBtn').onclick=()=>{ evoMainRun=!evoMainRun; updateEvoRunBtn(); renderEvoMainStats(); };
   $('evoResetBtn').onclick=resetEvoMain;
   $('evoDuelBtn').onclick=()=>setMode('evoMain');
+  document.querySelectorAll('#evoKindSeg button').forEach(bt=> bt.onclick=()=>setEvoKind(bt.dataset.k));
   document.querySelectorAll('#survSeg button').forEach(bt=> bt.onclick=()=>{
-    evoSurvive=+bt.dataset.s; if(evoMain) evoMain.survive=evoSurvive;   // 다음 세대 선택부터 적용
+    evoSurvive=+bt.dataset.s; if(evoGA) evoGA.survive=evoSurvive;   // 다음 세대 선택부터 적용
     document.querySelectorAll('#survSeg button').forEach(x=>x.classList.toggle('on',x===bt));
     $('survPct').textContent=Math.round(100*evoSurvive)+'%'; renderEvoMainStats(); });
   $('cmpRunBtn').onclick=()=>{ cmpRun=!cmpRun; updateCmpBtn(); renderEvoStats(); };
