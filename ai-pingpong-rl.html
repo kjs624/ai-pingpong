@@ -111,6 +111,21 @@
   body.scr-evo #evoMainPanel { display:block; }
   body.scr-cmp #resetBtn, body.scr-cmp #epsGroup, body.scr-evo #resetBtn, body.scr-evo #epsGroup { display:none; }
   body.hideui #controls, body.hideui #hint, body.hideui #panel, body.hideui #evoPanel, body.hideui #evoMainPanel { display:none !important; }
+  /* ===== 🎯 정책 탭 (방법 ac) ===== */
+  #acPanel { display:none; position:fixed; top:150px; right:12px; width:340px; z-index:11; background:rgba(10,16,30,0.9); backdrop-filter:blur(8px);
+             border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:10px 12px; font-size:12px; color:#e8eefc; overflow:auto; }
+  #acPanel .ph { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  #acPanel .ph b { font-size:14px; }
+  #acPanel button { padding:6px 10px; font-size:12px; white-space:nowrap; }
+  #acPanel .cmpgrid td { white-space:normal; } #acPanel .cmpgrid td:first-child { white-space:nowrap; color:#9fb0d0; }
+  #acCurve, #acStdCurve { width:100%; height:140px; display:block; background:#0b1222; border-radius:8px; touch-action:none; }
+  #acTip { position:absolute; pointer-events:none; display:none; background:#e8eefc; color:#0b1222; border-radius:6px; padding:5px 8px; font-size:11px; line-height:1.4; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.45); }
+  #acTip .k { display:inline-block; width:12px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; }
+  body.scr-ac #panel { display:none; }
+  body.scr-ac #acPanel { display:block; }
+  body.scr-ac #resetBtn, body.scr-ac #epsGroup { display:none; }
+  body.hideui #acPanel { display:none !important; }
+  @media (max-width:760px){ #acPanel { left:8px; right:8px; width:auto; } }
   @media (max-width:760px){
     #topLeft { top:6px; left:8px; flex-direction:row; align-items:center; gap:8px; }
     #tabs { gap:4px; }
@@ -154,7 +169,7 @@
   <div id="toast"></div>
 
   <div id="topLeft">
-    <div id="tabs"><button data-scr="evo">🧬 진화</button><button data-scr="rl" class="on">🎓 강화</button><button data-scr="cmp">⚖️ 비교</button></div>
+    <div id="tabs"><button data-scr="evo">🧬 진화</button><button data-scr="rl" class="on">🎓 강화</button><button data-scr="ac">🎯 정책</button><button data-scr="cmp">⚖️ 비교</button></div>
     <button id="hideBtn" title="단축키 H">숨기기</button>
   </div>
 
@@ -183,6 +198,37 @@
       뇌 = 작은 신경망(관측 16 → 은닉 12 → 팔 3축·손목 2축). 한 세대 <b>24</b>개체, 각자 볼 머신 테스트 12번의 평균 점수로 선택.
       처음엔 모두 0점이라 고를 수 없어서, 선택할 때만 마지막 공에 닿았거나 가까웠던 만큼 최대 +0.5를 더합니다(화면 점수에는 안 들어감).<br>
       3D 화면: 🔵 블루 = 현재 세대 최고 개체, 🔴 레드 자리 = 볼 머신. 진화는 이 탭을 떠나도 계속 진행됩니다.
+    </div>
+  </div>
+
+  <div id="acPanel">
+    <div class="ph"><b>🎯 정책 경사 (Actor-Critic)</b></div>
+    <div class="ptitle">진화와 같은 신경망(관측 16 → 은닉 12 → 팔 3축·손목 2축)을 <b>보상의 미분(역전파)</b>으로 직접 고칩니다. 결정마다 TD 오차 δ = r + γ·V(s′) − V(s): <b>Critic</b>은 δ를 줄이고, <b>Actor</b>는 δ 방향으로 자기 행동 확률을 올림. 블루·레드가 신경망을 공유하는 셀프플레이</div>
+    <div class="pbtns"><button id="acRunBtn" class="primary">▶ 학습 시작</button><button id="acResetBtn">↺ 처음부터</button></div>
+    <div id="acStatus" class="pnote" style="margin-top:4px"></div>
+    <div class="ptitle">학습 곡선: 미학습 로봇과 100점 대결 (평균 행동 μ, 탐험 없음)</div>
+    <div class="legend"><span><span class="k" style="background:#e05a9a"></span>승률</span><span><span class="k" style="background:#4fc3f7"></span>받기 성공률</span></div>
+    <div class="chartWrap">
+      <canvas id="acCurve" aria-label="학습 판 수에 따른 미학습 로봇 상대 승률·받기 성공률"></canvas>
+      <div id="acTip"></div>
+    </div>
+    <div class="ptitle">축별 표준편차 σ (탐험의 폭): 배울수록 줄어들면 행동이 확실해진다는 뜻</div>
+    <div class="legend" id="acStdLegend"></div>
+    <div class="chartWrap"><canvas id="acStdCurve" aria-label="학습 판 수에 따른 축별 행동 표준편차"></canvas></div>
+    <table class="cmpgrid">
+      <tbody>
+        <tr><td>학습 · 경험</td><td id="acProg">–</td></tr>
+        <tr><td>vs 미학습<br>승률·받기·넘기기</td><td id="acVsU">–</td></tr>
+        <tr><td>σ x·y·z·손목↕·↔</td><td id="acStd">–</td></tr>
+        <tr><td>평균 |δ| · 모방 저장</td><td id="acTd">–</td></tr>
+      </tbody>
+    </table>
+    <div class="pbtns"><button id="acDuelBtn">⚔️ 3D: 지금 정책 vs 미학습 로봇</button></div>
+    <div class="pnote">
+      Actor = 가우시안 정책: 축마다 평균 μ(신경망 출력)와 따로 배우는 표준편차 σ. 학습 중에는 N(μ, σ²)에서 뽑아 움직이고(탐험), 평가·3D 대결에서는 μ만 씁니다.<br>
+      적격도(λ=<b id="acLam"></b>)로 보상을 그 전 몇 결정에도 나눠 주고, 친 스윙의 넘기기·승패 보상도 적격도를 타고 준비 동작까지 갑니다. 보상은 ×<b id="acRs"></b>로 줄여 대략 ±1 범위, 한 번 고치는 크기는 잘라서 씁니다.<br>
+      <b>자기 모방</b>: 실제로 받은 보상 합이 V(s)보다 컸던 결정(처음 공을 맞힌 순간 등)을 모아 두고 다시 배워서, 드문 성공이 잊히지 않게 합니다.<br>
+      3D 화면: 🔵 블루 = 지금 정책(복사본, 학습 정지), 🔴 레드 = 미학습 로봇. 학습은 이 탭을 떠나도 계속 진행됩니다.
     </div>
   </div>
 
@@ -392,6 +438,7 @@ function observe(p,s){
 // ===== 뇌 = 축별 Q-테이블 5개 (x·y·z·손목 2축이 같은 보상을 받아 각자 학습) =====
 function makeBrain(){ const q={}; AXES.forEach(ax=>q[ax]={}); return { q, eps:CFG.epsStart, epsLock:false, frozen:false, episodes:0, balls:0, updates:0, tdAvg:0 }; }
 function cloneBrain(b,over){
+  if(b.type==='ac') return acClone(b,over);   // 🎯 방법 ac 구역
   if(b.type==='nn') return Object.assign({}, b, {w:b.w.slice()}, over||{});
   const q={}; AXES.forEach(ax=>{ const o={}, t=b.q[ax]||{}; for(const k in t) o[k]=t[k].slice(); q[ax]=o; });
   return Object.assign({}, b, {q}, over||{});
@@ -548,6 +595,7 @@ class Match {
     p.obs=o;
     if(p.brain.type==='nn'){ nnAct(p, o); return; }        // 🧬 진화한 신경망 뇌: 관측 → 행동 (학습 없음, 세대가 바뀌며 진화)
     if(p.brain.lambda!=null) qlUpdate(p,o);                // 🔗 Q(λ) 뇌: 적격도로 업데이트(방법: qlambda 구역). 아래 TD(0) 업데이트는 건너뜀
+    if(p.brain.type==='ac'){ acDecide(p, o); return; }     // 🎯 Actor-Critic 뇌: 방법 ac 구역
     if(p.swingPend && p.swingPend.ready){                 // 친 공이 상대 코트에 들어감 → 그 스윙을 보상과 함께 업데이트
       const w=p.swingPend; for(let i=0;i<NAX;i++) qLearn(p.brain,AXES[i],w.keys[i],w.a[i],w.r,o.keys[i]);
       p.swingPend=null;
@@ -640,6 +688,7 @@ class Match {
       const outcome = winner ? (p===winner?CFG.rWin:CFG.rLose) : (p===missed?CFG.rVoidMiss:0);
       if(winner || terminal) p.ret+=outcome;
       if(p.brain.lambda!=null) qlSettle(p, winner || terminal, outcome);   // 🔗 Q(λ): 종료 업데이트를 적격도로(방법: qlambda 구역)
+      if(p.brain.type==='ac'){ acSettle(p, (winner||terminal)?outcome:null); continue; }   // 🎯 방법 ac 구역
       const sw=p.swingPend;                // 결과가 안 나온 채 판이 끝남(네트·아웃 등) → 승패는 그 스윙의 몫
       if(sw){
         if(winner || terminal){ const r=sw.r+outcome; for(let i=0;i<NAX;i++) qLearn(p.brain,AXES[i],sw.keys[i],sw.a[i],r,null); }
@@ -1147,6 +1196,216 @@ registerMethod({
   },
 });
 
+// ── 방법: ac — 🎯 정책 경사(Actor-Critic): 신경망 정책을 보상의 미분(역전파)으로 직접 고침, 셀프플레이 ──
+//  Actor(정책): nnFeatures 16 → 은닉 12(tanh) → 5축 행동 평균 μ(tanh, 출력 범위는 진화 nnAct와 같음).
+//               축마다 학습하는 표준편차 σ를 가진 가우시안 정책 u ~ N(μ, σ²) → [-1,1]로 잘라 팔·손목에 적용.
+//  Critic(가치): 같은 입력 16 → 은닉 12(tanh) → V(s) 하나. Actor와 따로인 작은 신경망.
+//  결정마다 TD 오차 δ = r + γ·V(s') − V(s)  (보상은 ×AC.rScale로 대략 ±1 범위)
+//    Critic: w ← w + αc·δ·e_c    (δ를 줄이는 방향)       e_c ← γλ·e_c + ∇V(s)
+//    Actor : θ ← θ + αa·δ·e_a    (δ 방향으로 log π(u|s)를 올림)   e_a ← γλ·e_a + ∇log π(u|s)
+//  적격도(e)는 로봇(블루·레드)마다 따로 들고, 판이 끝나면 비움. 친 스윙은 Q-러닝과 같이 결과(넘김/실책)가 나올 때까지
+//  따로 보관하는데, 그때 적격도도 같이 떼어 둠 → 넘기기·승패 보상이 치기 전 준비 동작까지 γλ배씩 줄며 나뉨.
+//  업데이트 크기는 잘라서(AC.clip) 큰 δ 하나가 신경망을 망가뜨리지 않게 함. 평가(frozen)는 평균 행동 μ만 씀(탐험 없음).
+//  셀프플레이: Q-러닝처럼 블루·레드가 한 신경망을 공유(적격도만 각자).
+//  처음엔 무작위로 휘둘러 공을 맞히는 일이 0.5% 정도로 드묾 → 위 TD 업데이트만으로는 시드 대부분에서 배우지 못했음(실측).
+//  그래서 두 가지를 더함: ① 자기 모방(아래 acSil…): 실제로 돌려받은 보상 합이 V(s)보다 컸던 결정을 모아 다시 배움
+//  ② 처음 좋은 결과가 저장되기 전엔 Actor를 TD로 고치지 않음(AC.waitFirst): 그전의 δ는 Critic 잡음뿐이라 팔이 구석으로 흘러감.
+//  학습 정책은 그대로 Actor-Critic(같은 Actor·Critic 신경망, 같은 nnGrad). 시도한 것과 결과는 PR 본문 참고.
+const AC={
+  hidden:12,                     // 은닉 노드 수
+  initSd:0.6, initOutSd:0,       // 처음 가중치 크기(randn 배율): 은닉층 · 출력층(0 → 처음엔 평균 행동 0 '유지', V=0)
+  sd0:0.6,                       // 처음 표준편차(미학습 Q 로봇의 무작위 행동과 비슷한 폭)
+  sdMin:0.05, sdMax:1.0,         // 표준편차 범위
+  gamma:0.95, lambda:0.8,        // 할인율 γ(Q-러닝과 같음) · 적격도 감쇠 λ
+  lrActor:0.002, lrStd:0.0005, lrCritic:0.02,  // 학습률 (Actor는 작게: 공을 맞히기 전의 잡음 δ로 팔이 구석으로 흘러가지 않게)
+  rScale:0.01,                   // 보상 배율: 받기 45 → 0.45, 이기기 80 → 0.8
+  clip:1.0,                      // 한 번 업데이트의 크기 상한(기울기 노름 자르기)
+  waitFirst:true,                // 처음 좋은 결과(자기 모방 저장)가 생기기 전엔 Actor를 TD로 고치지 않음
+  silCap:3000, silBatch:16, silLr:10, silMinG:0, silMaxA:1, silRatio:0.02,   // 자기 모방: 저장 개수 · 판마다 다시 볼 개수 · 학습률 배율 · 저장 기준 G · A 상한
+};
+
+// ===== 은닉층 하나짜리 신경망 + 직접 짠 역전파 (라이브러리 없음) =====
+//  net = { nIn, nH, nOut, out:'tanh'|'linear', w:[…] }
+//  가중치 배치(진화 유전자 randGenes와 같은 순서): 은닉 j마다 [입력 nIn개, 편향], 출력 m마다 [은닉 nH개, 편향]
+//    → nnMake(16,12,5,'tanh')의 w는 makeNNBrain(w)에 그대로 넣어도 같은 행동 평균을 냄
+//  nnForward(net, x)            출력 y(활성화 뒤) 배열을 돌려줌. h를 주면 은닉 활성화를 거기에 써 줌
+//  nnGrad(net, x, dOut, g, s)   g[k] += s · ∂(Σ_m dOut[m]·y[m]) / ∂w[k]  (역전파). y를 돌려줌
+//                               → 손실 L의 기울기를 원하면 dOut[m] = ∂L/∂y[m]를 넘기면 됨
+//  nnStep(net, g, lr, clip?)    w ← w − lr·g (clip이 있으면 lr·g의 노름을 clip 이하로 자름)
+//
+//  사용법(5단계 모방 학습 같은 지도학습 — 평균제곱오차 ½Σ(y−t)²):
+//    const net=nnMake(NN_IN,12,NN_OUT,'tanh'), g=new Float64Array(net.w.length);
+//    for(const {x,t} of batch){ const y=nnForward(net,x); nnGrad(net, x, y.map((v,m)=>v-t[m]), g, 1/batch.length); }
+//    nnStep(net, g, 0.05);  g.fill(0);
+//  Actor-Critic은 손실 대신 "올리고 싶은 값"의 기울기(∇V, ∇log π)를 적격도 g에 쌓아 두고 δ를 곱해 더함(acUpdate).
+//  수치 미분 검사: node verify-nngrad.js
+function nnMake(nIn,nH,nOut,out,sd,outSd){
+  const w=new Array(nH*(nIn+1)+nOut*(nH+1)); let k=0;
+  for(let j=0;j<nH;j++) for(let i=0;i<=nIn;i++) w[k++]=randn()*(sd||0.6);       // randn 표준편차 ≈0.45
+  for(let m=0;m<nOut;m++) for(let j=0;j<=nH;j++) w[k++]=randn()*(outSd==null?(sd||0.6):outSd);
+  return { nIn, nH, nOut, out:out||'tanh', w };
+}
+const _nnTmpH=new Array(64), _nnTmpD=new Array(64);
+function nnForward(net,x,h){
+  const {nIn,nH,nOut,w}=net, y=new Array(nOut); h=h||_nnTmpH; let k=0;
+  for(let j=0;j<nH;j++){ let s=0; for(let i=0;i<nIn;i++) s+=w[k++]*x[i]; h[j]=Math.tanh(s+w[k++]); }
+  for(let m=0;m<nOut;m++){ let s=0; for(let j=0;j<nH;j++) s+=w[k++]*h[j]; s+=w[k++]; y[m]=net.out==='tanh'?Math.tanh(s):s; }
+  return y;
+}
+function nnGrad(net,x,dOut,g,scale){
+  const {nIn,nH,nOut,w}=net, h=_nnTmpH, dh=_nnTmpD, y=nnForward(net,x,h);
+  if(scale==null) scale=1;
+  for(let j=0;j<nH;j++) dh[j]=0;
+  let k=nH*(nIn+1);
+  for(let m=0;m<nOut;m++){                                     // 출력층: dz = dOut·(tanh면 1−y²)
+    let dz=dOut[m]*scale; if(net.out==='tanh') dz*=1-y[m]*y[m];
+    for(let j=0;j<nH;j++){ g[k+j]+=dz*h[j]; dh[j]+=dz*w[k+j]; }
+    g[k+nH]+=dz; k+=nH+1;
+  }
+  k=0;
+  for(let j=0;j<nH;j++){                                       // 은닉층: dz = (Σ 위층 기울기)·(1−h²)
+    const dz=dh[j]*(1-h[j]*h[j]);
+    for(let i=0;i<nIn;i++) g[k+i]+=dz*x[i];
+    g[k+nIn]+=dz; k+=nIn+1;
+  }
+  return y;
+}
+function nnStep(net,g,lr,clip){
+  let f=lr;
+  if(clip){ let n=0; for(let k=0;k<g.length;k++) n+=g[k]*g[k]; n=Math.sqrt(n)*lr; if(n>clip) f*=clip/n; }
+  const w=net.w; for(let k=0;k<w.length;k++) w[k]-=f*g[k];
+}
+
+// ===== Actor-Critic 뇌 =====
+function makeACBrain(){
+  return { type:'ac', actor:nnMake(NN_IN,AC.hidden,NN_OUT,'tanh',AC.initSd,AC.initOutSd), logStd:new Array(NN_OUT).fill(Math.log(AC.sd0)),
+    critic:nnMake(NN_IN,AC.hidden,1,'linear',AC.initSd,AC.initOutSd),
+    frozen:false, eps:0, epsLock:true, episodes:0, balls:0, updates:0, tdAvg:0, q:{} };
+}
+function acClone(b,over){
+  const cp=n=>Object.assign({}, n, {w:n.w.slice()});
+  return Object.assign({}, b, {actor:cp(b.actor), critic:cp(b.critic), logStd:b.logStd.slice()}, over||{});
+}
+const acStd=br=>br.logStd.map(Math.exp);
+function acGauss(){ const u=1-rand(), v=rand(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }   // 표준정규(Box–Muller)
+// log π(u|s) = Σ_k [ −(u_k−μ_k)²/(2σ_k²) − log σ_k − ½log 2π ]
+function acLogProb(br,f,u){
+  const mu=nnForward(br.actor,f); let lp=0;
+  for(let k=0;k<NN_OUT;k++){ const s=Math.exp(br.logStd[k]), d=(u[k]-mu[k])/s; lp+=-0.5*d*d-br.logStd[k]-0.9189385332046727; }
+  return lp;
+}
+// ∇log π(u|s)를 ga(Actor 가중치)·gs(log σ)에 scale배 더함: ∂/∂μ = (u−μ)/σ², ∂/∂logσ = (u−μ)²/σ² − 1
+const _acD=new Array(NN_OUT);
+function acLogProbGrad(br,f,u,ga,gs,scale){
+  const mu=nnForward(br.actor,f);
+  for(let k=0;k<NN_OUT;k++){ const s2=Math.exp(2*br.logStd[k]), d=u[k]-mu[k]; _acD[k]=d/s2; gs[k]+=scale*(d*d/s2-1); }
+  nnGrad(br.actor,f,_acD,ga,scale);
+}
+function acTraces(br){ return { ea:new Float64Array(br.actor.w.length), es:new Float64Array(NN_OUT), ec:new Float64Array(br.critic.w.length) }; }
+const acV=(br,f)=>nnForward(br.critic,f)[0];
+// δ와 적격도로 한 번 업데이트(크기는 AC.clip으로 자름)
+function acUpdate(br,T,delta){
+  if(!T) return;
+  br.updates++; br.tdAvg+=0.002*(Math.abs(delta)-br.tdAvg);
+  const step=(w,e,lr)=>{ let n=0; for(let k=0;k<e.length;k++) n+=e[k]*e[k]; let f=lr*delta; const sz=Math.abs(f)*Math.sqrt(n); if(sz>AC.clip) f*=AC.clip/sz; for(let k=0;k<e.length;k++) w[k]+=f*e[k]; };
+  step(br.critic.w, T.ec, AC.lrCritic);
+  if(AC.waitFirst && !(br.sil && br.sil.length)) return;   // 아직 한 번도 좋은 결과가 없으면 δ는 Critic 잡음뿐 → Actor는 그대로(구석으로 흘러가지 않게)
+  step(br.actor.w, T.ea, AC.lrActor);
+  step(br.logStd, T.es, AC.lrStd);
+  const lo=Math.log(AC.sdMin), hi=Math.log(AC.sdMax);
+  for(let k=0;k<NN_OUT;k++) br.logStd[k]=Math.max(lo,Math.min(hi,br.logStd[k]));
+}
+// 친 스윙: 그 순간의 적격도를 스윙과 함께 떼어 두고(결과가 나오면 그걸로 업데이트), 이후 동작은 새 적격도로 시작
+function acHoldSwing(p){ const sw=p.swingPend; if(sw && !sw.tr){ sw.tr=p.acT||null; p.acT=p.acT?acTraces(p.brain):null; } }
+function acApply(p,u){
+  const a=u.map(v=>Math.max(-1,Math.min(1,v))), ego=-p.side;
+  p.cmd[0]=ego*0.95*a[0]; p.cmd[1]=0.95*a[1]; p.cmd[2]=ego*0.95*a[2];   // 출력 범위는 진화 nnAct와 같음
+  p.tgtP=0.5*a[3]; p.tgtW=0.5*a[4];
+  const lv=(v,L)=>{ let bi=0; for(let i=1;i<L.length;i++) if(Math.abs(L[i]-v)<Math.abs(L[bi]-v)) bi=i; return bi; };   // 화면 표시용 가까운 단계
+  p.act=[lv(0.95*a[0],VLEV), lv(0.95*a[1],VLEV), lv(0.95*a[2],VLEV), lv(0.5*a[3],WLEV), lv(0.5*a[4],WLEV)];
+}
+// Match.decide에서 부름: 관측 → (스윙·직전 결정 TD 업데이트) → 가우시안에서 새 행동
+function acDecide(p,o){
+  const br=p.brain, f=nnFeatures(o).slice();
+  if(br.frozen){ acApply(p, nnForward(br.actor,f)); return; }       // 평가: 평균 행동 μ(탐험 없음)
+  const v=acV(br,f), rs=AC.rScale, g=AC.gamma;
+  const sw=p.swingPend;
+  if(sw){
+    acHoldSwing(p);
+    if(sw.ready){ acUpdate(br, sw.tr, sw.r*rs+g*v-acV(br,sw.f)); p.swingPend=null; }   // 친 공이 상대 코트에 들어감
+  }
+  if(p.pend) acUpdate(br, p.acT, p.pend.r*rs+g*v-acV(br,p.pend.f));
+  const T=p.acT||(p.acT=acTraces(br)), mu=nnForward(br.actor,f), u=new Array(NN_OUT), gl=g*AC.lambda;
+  for(let k=0;k<NN_OUT;k++) u[k]=mu[k]+Math.exp(br.logStd[k])*acGauss();
+  for(let k=0;k<T.ea.length;k++) T.ea[k]*=gl;
+  for(let k=0;k<T.ec.length;k++) T.ec[k]*=gl;
+  for(let k=0;k<NN_OUT;k++) T.es[k]*=gl;
+  nnGrad(br.critic,f,[1],T.ec,1);
+  acLogProbGrad(br,f,u,T.ea,T.es,1);
+  p.pend={f, u, r:0};
+  (p.acLog||(p.acLog=[])).push(p.pend);                              // 이번 판의 결정 기록(자기 모방용, 보상은 나중에 이 객체에 쌓임)
+  acApply(p,u);
+}
+// Match.settle에서 부름: 판이 끝남 → 남은 스윙·결정에 종료 보상(γ항 없음). outcome=null(랠리 상한)이면 업데이트 없이 버림
+function acSettle(p,outcome){
+  const br=p.brain, sw=p.swingPend, rs=AC.rScale;
+  if(!br.frozen && outcome!=null){
+    if(sw){ sw.r+=outcome; acHoldSwing(p); acUpdate(br, sw.tr, sw.r*rs-acV(br,sw.f)); }   // 네트·아웃 등: 승패는 그 스윙의 몫
+    if(p.pend){ if(!sw) p.pend.r+=outcome; acUpdate(br, p.acT, p.pend.r*rs-acV(br,p.pend.f)); }
+    acSilStore(br, p.acLog);
+    acSilReplay(br);
+  }
+  p.swingPend=null; p.pend=null; p.acT=null; p.acLog=null; p.flight=false;
+}
+// ===== 자기 모방(Self-Imitation): 실제 돌려받은 보상 합 G가 V(s)보다 컸던 결정을 모아 두고 다시 배움 =====
+//  드물게 처음 공을 맞힌 경험이 다음 몇 번의 실패에 묻혀 잊히지 않게 함(Oh et al., 2018 "Self-Imitation Learning").
+//  판이 끝나면 그 판의 결정마다 G = r + γ·G'(시간 순서 거꾸로)를 구해 G>0인 것만 저장 →
+//  매 판 끝에 AC.silBatch개를 뽑아 A = G − V(s) > 0 이면 Actor는 A·∇log π(u|s), Critic은 A·∇V(s) 방향으로(같은 nnGrad 사용).
+function acSilStore(br,log){
+  if(!log || !log.length) return;
+  const buf=br.sil||(br.sil=[]), rs=AC.rScale; let G=0;
+  for(let i=log.length-1;i>=0;i--){ G=log[i].r*rs+AC.gamma*G; if(G>AC.silMinG) buf.push({f:log[i].f, u:log[i].u, G}); }
+  if(buf.length>AC.silCap) buf.splice(0, buf.length-AC.silCap);
+}
+function acSilReplay(br){
+  const buf=br.sil; if(!buf || !buf.length || !AC.silBatch) return;
+  const S=br._silG||(br._silG=acTraces(br)); S.ea.fill(0); S.es.fill(0); S.ec.fill(0);
+  let used=0; const nb=Math.min(AC.silBatch, Math.ceil(buf.length*AC.silRatio));   // 저장이 적을 땐 조금만(몇 개에 과적합 방지)
+  for(let n=0;n<nb;n++){
+    const e=buf[(rand()*buf.length)|0], A=Math.min(AC.silMaxA, e.G-acV(br,e.f));
+    if(A<=0) continue; used++;
+    nnGrad(br.critic,e.f,[1],S.ec,A);
+    acLogProbGrad(br,e.f,e.u,S.ea,S.es,A);
+  }
+  if(!used) return;
+  br.silUpdates=(br.silUpdates||0)+used;
+  const step=(w,g,lr)=>{ let n=0; for(let k=0;k<g.length;k++) n+=g[k]*g[k]; let f=lr/AC.silBatch; const sz=f*Math.sqrt(n); if(sz>AC.clip) f*=AC.clip/sz; for(let k=0;k<g.length;k++) w[k]+=f*g[k]; };
+  step(br.critic.w, S.ec, AC.lrCritic*AC.silLr);
+  step(br.actor.w, S.ea, AC.lrActor*AC.silLr);
+  step(br.logStd, S.es, AC.lrStd*AC.silLr);
+  const lo=Math.log(AC.sdMin), hi=Math.log(AC.sdMax);
+  for(let k=0;k<NN_OUT;k++) br.logStd[k]=Math.max(lo,Math.min(hi,br.logStd[k]));
+}
+registerMethod({
+  id:'ac', icon:'🎯', name:'정책 경사(Actor-Critic)', color:'#e05a9a',
+  note:'진화와 같은 신경망·관측. 결정마다 TD 오차 δ를 구해 Critic(가치)은 δ를 줄이고, Actor(가우시안 정책)는 δ 방향으로 자기 행동 확률을 올림(역전파로 직접 미분). 적격도로 친 스윙의 보상을 준비 동작까지 나누고, 드문 성공은 자기 모방으로 다시 배움. 셀프플레이.',
+  defaultTrain:6000, checkpoints:[0,500,1000,2000,3000,4000,6000,8000,12000,20000],
+  create(){
+    const br=makeACBrain(); let match=null;
+    return {
+      unit:'판', brain:()=>br, progress:()=>br.episodes, balls:()=>br.balls,
+      run(n){ if(!match) match=new Match(br,br); for(let i=0;i<n;i++) match.step(); },
+      trainTo(n){ match=trainSelfPlay(br, n-br.episodes, match); },
+      label:()=>br.episodes+'판',
+    };
+  },
+  summary(L){
+    const br=L.brain(), names=['x','y','z','손목 위아래','손목 좌우'];
+    return '축별 표준편차 σ: '+acStd(br).map((s,i)=>names[i]+' '+s.toFixed(2)).join(' · ')+', TD 업데이트 '+br.updates+'회 · 평균 |δ| '+br.tdAvg.toFixed(3);
+  },
+  api:{ AC, nnMake, nnForward, nnGrad, nnStep, makeACBrain, acClone, acStd, acLogProb, acLogProbGrad, acV },   // UI·검사(verify-nngrad.js)·5단계용
+});
+
 function stateCounts(brain){ const c={}; AXES.forEach(ax=>c[ax]=Object.keys(brain.q[ax]||{}).length); return c; }
 
 root.PongRL={ Match, EvalJob, Evolution, MACHINE, METHODS, registerMethod, getMethod, makeNNBrain, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
@@ -1309,7 +1568,7 @@ function setupCameraControls(el){
     else if(e.touches.length===2){ const a=e.touches[0],b=e.touches[1]; const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); if(pinchD){ camR*=pinchD/d; applyCam(); } pinchD=d; } }, {passive:false});
   el.addEventListener('touchend', up);
 }
-function onResize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); layout(); drawCurve(); drawEvoCurve(); drawFitCurve(); }
+function onResize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); layout(); drawCurve(); drawEvoCurve(); drawFitCurve(); drawACCharts(); }
 // 패널·힌트 배치: 상단 카드와 하단 컨트롤의 실제 크기에 맞춰 겹치지 않게
 function layout(){
   // 왼쪽 위 탭과 상단 점수 카드가 겹치지 않게: 데스크톱에선 카드 영역을 탭 오른쪽부터 시작
@@ -1325,7 +1584,7 @@ function layout(){
   if(innerWidth>=760){ panel.style.top=top+'px'; panel.style.bottom='auto'; }
   else { panel.style.top='auto'; panel.style.bottom=(innerHeight-floor+8)+'px'; }
   panel.style.maxHeight=avail+'px';
-  for(const id of ['evoPanel','evoMainPanel']){
+  for(const id of ['evoPanel','evoMainPanel','acPanel']){
     const ep2=document.getElementById(id);
     if(innerWidth>=760){ ep2.style.top=top+'px'; ep2.style.bottom='auto'; } else { ep2.style.top='auto'; ep2.style.bottom=(innerHeight-floor+8)+'px'; }
     ep2.style.maxHeight=avail+'px';
@@ -1335,7 +1594,11 @@ function layout(){
 // ===== 모드 전환: 🎓 학습(셀프플레이) / ⚔️ 검증(학습 AI vs 미학습 AI) =====
 function setMode(m){
   mode=m;
-  if(m==='evoMain'){
+  if(m==='acMain'){
+    // 🎯 정책 탭: 블루 = 지금 Actor-Critic 정책의 복사본(학습 정지, 평균 행동), 레드 = 미학습 로봇
+    acDuel={label:acMain.L.label()};
+    game=new Match(cloneBrain(acMain.L.brain(),{frozen:true,eps:0}), cloneBrain(UNTRAINED,{frozen:true,eps:0}), hooks);
+  } else if(m==='evoMain'){
     // 🧬 진화 탭: 블루 = 현재 세대 최고 개체가 🎾 볼 머신 테스트(실패하면 점수 남기고 다시 시작)
     duelMain={gen:evoMain.gen};
     game=new Match(evoMain.bestBrain(), MACHINE, hooks, {drill:{loop:true}});
@@ -1358,6 +1621,7 @@ function setMode(m){
 function nameOf(p){
   if(mode==='evo') return p===game.p1? duelInfo.aIcon+' '+duelInfo.aName : duelInfo.bIcon+' '+duelInfo.bName;
   if(mode==='evoMain') return p===game.p1?'🧬 최고 개체':'🎾 볼 머신';
+  if(mode==='acMain') return p===game.p1?'🎯 정책 로봇':'🐣 미학습 로봇';
   if(mode==='verify') return p===game.p1?'🎓 학습 로봇':'🐣 미학습 로봇';
   return p===game.p1?'🔵 블루':'🔴 레드';
 }
@@ -1441,8 +1705,8 @@ function updateUI(){
   g1.textContent=p1.games; g2.textContent=p2.games;
   sm1.textContent=p1.smashWins; sv1.textContent=p1.saves; er1.textContent=p1.err; rt1.textContent=pct(p1.hits,p1.hits+p1.misses); ov1.textContent=pct(p1.overs,p1.hits);
   sm2.textContent=p2.smashWins; sv2.textContent=p2.saves; er2.textContent=p2.err; rt2.textContent=pct(p2.hits,p2.hits+p2.misses); ov2.textContent=pct(p2.overs,p2.hits);
-  n1.textContent = mode==='evoMain' ? '🧬 '+duelMain.gen+'세대 최고' : mode==='evo' ? duelInfo.a : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
-  n2.textContent = mode==='evoMain' ? '볼 머신 🎾' : mode==='evo' ? duelInfo.b : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
+  n1.textContent = mode==='acMain' ? '🎯 정책 로봇('+acDuel.label+')' : mode==='evoMain' ? '🧬 '+duelMain.gen+'세대 최고' : mode==='evo' ? duelInfo.a : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
+  n2.textContent = mode==='acMain' ? '미학습 로봇 🐣' : mode==='evoMain' ? '볼 머신 🎾' : mode==='evo' ? duelInfo.b : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
   setn.textContent=p1.games+p2.games+1;
   const b=game.b;
   srv.textContent = (b.serve ? b.lastHitter : game.currentServer())===p1 ? '🔵' : '🔴';
@@ -1456,6 +1720,9 @@ function updateUI(){
     const d=game.drill;
     s1.textContent=d.streak; s2.textContent=d.best;   // 왼쪽 = 지금 연속, 오른쪽 = 최고 연속
     modeRow.innerHTML='🎾 볼 머신 테스트 · 연속 <b>'+d.streak+'</b>개 · 공 속도 ×'+d.level.toFixed(2)+' · 점수 '+d.score.toFixed(1)+' · 최고 연속 <b>'+d.best+'</b>개 ('+d.runs+'회 시도)';
+  } else if(mode==='acMain'){
+    const n=p1.pointsWon+p2.pointsWon;
+    modeRow.innerHTML='🎯 정책 대결 · 🎯 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점) · 평균 행동 μ(탐험 없음)';
   } else if(mode==='evo'){
     const n=p1.pointsWon+p2.pointsWon;
     modeRow.innerHTML='⚖️ 비교 대결 · '+duelInfo.aIcon+' 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점)';
@@ -1469,6 +1736,7 @@ function updateUI(){
   renderObs();
   if(evoOn) renderEvoStats();
   if(curScreen==='evo') renderEvoMainStats();
+  if(curScreen==='ac') renderACStats();
   tdErr.textContent=brain.updates? brain.tdAvg.toFixed(3) : '–';
   drawSpark();
 }
@@ -1516,6 +1784,9 @@ function runJobs(budgetMs){
         }
         renderEvo();
       }
+    } else if(acJobs.length){
+      const e=acJobs[0];
+      if(e.job.run(400)){ acJobs.shift(); if(acMain && e.owner===acMain){ const r=e.job.r; acMain.curve.push({ep:e.ep, balls:e.balls, win:r.winRateA, ret:r.retA, over:r.overA, n:r.n, z:r.z}); } renderAC(); }
     } else if(h2hJob){
       if(h2hJob.job.run(400)){ showH2H(h2hJob); h2hJob=null; }
     } else if(benchJob){
@@ -1738,10 +2009,12 @@ function setScreen(scr){
   curScreen=scr; evoOn=(scr==='cmp');
   document.body.classList.toggle('scr-evo', scr==='evo');
   document.body.classList.toggle('scr-cmp', scr==='cmp');
+  document.body.classList.toggle('scr-ac', scr==='ac');
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.scr===scr));
   if(scr==='cmp'){ if(!cmpItems) resetCmp(); setMode('evo'); renderEvo(); }
   else if(scr==='evo'){ if(!evoMain) resetEvoMain(); setMode('evoMain'); renderEvoMain(); }
-  else setMode(rlMode==='evo'||rlMode==='evoMain' ? 'train' : rlMode);
+  else if(scr==='ac'){ if(!acMain) resetAC(); setMode('acMain'); renderAC(); }
+  else setMode(rlMode==='evo'||rlMode==='evoMain'||rlMode==='acMain' ? 'train' : rlMode);
   layout();
 }
 
@@ -1914,6 +2187,123 @@ function toggleHide(){
   if(!on) layout();
 }
 
+// =====================================================================
+//  🎯 정책 탭: 정책 경사(Actor-Critic) 학습기(학습 방법 목록의 'ac')를 백그라운드에서 조금씩 학습
+//  학습 곡선(미학습 로봇 상대 승률·받기) + 축별 표준편차 σ(탐험이 줄어드는 모습)
+// =====================================================================
+let acMain=null, acRun=false, acJobs=[], acDuel={label:''}, acHover=null;
+const AC_AX=[['x','#4fc3f7'],['y','#66bb6a'],['z','#ffd54f'],['손목↕','#ff7ab6'],['손목↔','#b39ddb']];
+const acApi=()=>PongRL.getMethod('ac').api;
+function resetAC(){
+  acMain={L:PongRL.getMethod('ac').create(), curve:[], std:[], nextEval:0, nextStd:0};
+  acJobs=[]; acRun=false; updateACRunBtn();
+  acCheck();
+  if(curScreen==='ac') setMode('acMain');
+  renderAC();
+}
+// 체크포인트: 평가(초반엔 촘촘히) · σ 기록(50판마다)
+function acCheck(){
+  const L=acMain.L, ep=L.progress();
+  if(ep>=acMain.nextStd){ acMain.std.push({ep, s:acApi().acStd(L.brain())}); acMain.nextStd=ep+50; }
+  if(ep>=acMain.nextEval && acJobs.length<3){
+    acJobs.push({owner:acMain, ep, balls:L.balls(), job:new EvalJob(L.brain(), UNTRAINED, EVAL_POINTS)});
+    acMain.nextEval=ep+(ep<2000?250:500);
+  }
+}
+function runACMain(budgetMs){
+  const t0=performance.now();
+  while(performance.now()-t0<budgetMs){ acMain.L.run(300); acCheck(); }
+}
+function updateACRunBtn(){ const b=document.getElementById('acRunBtn'); if(b) b.textContent=acRun?'⏸ 학습 정지':'▶ 학습 시작'; }
+function renderACStats(){
+  if(!acMain) return;
+  const $=id=>document.getElementById(id), L=acMain.L, br=L.brain(), last=acMain.curve.at(-1);
+  $('acProg').textContent=L.label()+' · 공 '+L.balls()+'개';
+  $('acVsU').textContent=last ? pctR(last.win)+' · '+pctR(last.ret)+' · '+pctR(last.over)+' ('+last.ep+'판, '+last.n+'점)' : '–';
+  $('acStd').textContent=acApi().acStd(br).map(v=>v.toFixed(2)).join(' · ');
+  $('acTd').textContent=(br.updates? br.tdAvg.toFixed(3) : '–')+' · '+((br.sil||[]).length)+'개';
+  const v=last ? verdictOf(last) : null;
+  $('acStatus').textContent=(acRun?'학습 중… ':'정지됨 · ')+L.label()+(acJobs.length?' · 평가 중…':'')+(v?' — '+v.text:'');
+}
+function renderAC(){ renderACStats(); drawACCharts(); }
+function acGeom(cv, maxY){
+  const W=cv.clientWidth||300, H=cv.clientHeight||140, L=34, Rp=36, T=10, B=20, pw=W-L-Rp, ph=H-T-B;
+  const maxEp=Math.max(1000, acMain? Math.max(acMain.L.progress(), ...acMain.curve.map(c=>c.ep)) : 0);
+  return {W,H,L,T,pw,ph,maxEp, X:v=>L+v/maxEp*pw, Y:v=>T+(1-v/maxY)*ph};
+}
+function acCanvas(cv, g){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  if(cv.width!==Math.round(g.W*dpr) || cv.height!==Math.round(g.H*dpr)){ cv.width=Math.round(g.W*dpr); cv.height=Math.round(g.H*dpr); }
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,g.W,g.H); return c;
+}
+// 선 하나 + 끝점 동그라미, 끝점 라벨 위치를 돌려줌
+function acLine(c, g, pts, col){
+  c.strokeStyle=col; c.lineWidth=2; c.lineJoin='round'; c.lineCap='round'; c.beginPath();
+  pts.forEach(([x,y],i)=>{ i?c.lineTo(g.X(x),g.Y(y)):c.moveTo(g.X(x),g.Y(y)); }); c.stroke();
+  const [lx,ly]=pts.at(-1), x=g.X(lx), y=g.Y(ly);
+  c.fillStyle=C_SURF; c.beginPath(); c.arc(x,y,6,0,7); c.fill(); c.fillStyle=col; c.beginPath(); c.arc(x,y,4,0,7); c.fill();
+  return {x,y};
+}
+function acLabels(c, g, labels){
+  labels.sort((a,b)=>a.y-b.y);
+  for(let i=1;i<labels.length;i++) if(labels[i].y-labels[i-1].y<12) labels[i].y=labels[i-1].y+12;   // 겹치면 아래로 벌림
+  const over=labels.length ? labels.at(-1).y-(g.T+g.ph-4) : 0; if(over>0) labels.forEach(l=>l.y-=over);   // 바닥을 넘으면 통째로 올림
+  c.fillStyle=C_TEXT; c.font='600 11px "Segoe UI","Malgun Gothic",sans-serif'; c.textAlign='left'; c.textBaseline='middle';
+  labels.forEach(l=>c.fillText(l.t, l.x+8, Math.min(g.T+g.ph-4, Math.max(g.T+4, l.y))));
+}
+function acAxes(c, g, ticks, fmt){
+  c.lineWidth=1; c.font='10px "Segoe UI","Malgun Gothic",sans-serif'; c.fillStyle=C_MUTED; c.textAlign='right'; c.textBaseline='middle';
+  ticks.forEach(([v,col])=>{ const y=Math.round(g.Y(v))+0.5; c.strokeStyle=col; c.beginPath(); c.moveTo(g.L,y); c.lineTo(g.L+g.pw,y); c.stroke(); c.fillText(fmt(v), g.L-5, g.Y(v)); });
+  c.textBaseline='top'; c.textAlign='left'; c.fillText('0판', g.L, g.T+g.ph+5); c.textAlign='right'; c.fillText(g.maxEp+'판', g.L+g.pw, g.T+g.ph+5);
+}
+function drawACCharts(){
+  if(!acMain || curScreen!=='ac') return;
+  // ① 학습 곡선
+  const cv=document.getElementById('acCurve'), g=acGeom(cv,1), c=acCanvas(cv,g), d=acMain.curve;
+  acAxes(c, g, [[0,C_GRID],[1,C_GRID],[0.5,C_BASE]], v=>Math.round(v*100)+'%');
+  if(!d.length){ c.textAlign='center'; c.textBaseline='middle'; c.fillText('▶ 학습 시작을 누르면 체크포인트마다 점이 찍힙니다', g.L+g.pw/2, g.T+g.ph/2); }
+  else {
+    const labels=[];
+    [['ret','#4fc3f7'],['win','#e05a9a']].forEach(([k,col])=>{ const e=acLine(c, g, d.map(p=>[p.ep,p[k]]), col); labels.push({x:e.x,y:e.y,t:pctR(d.at(-1)[k])}); });
+    acLabels(c, g, labels);
+    if(acHover!=null){ const x=Math.round(g.X(acHover))+0.5; c.strokeStyle=C_MUTED; c.lineWidth=1; c.beginPath(); c.moveTo(x,g.T); c.lineTo(x,g.T+g.ph); c.stroke(); }
+  }
+  // ② 축별 표준편차 σ
+  const cs=document.getElementById('acStdCurve'), maxS=Math.max(0.8, ...acMain.std.flatMap(h=>h.s)), g2=acGeom(cs,maxS), c2=acCanvas(cs,g2), hs=acMain.std;
+  acAxes(c2, g2, [[0,C_GRID],[0.5,C_GRID],[maxS,C_GRID]], v=>v.toFixed(1));
+  if(hs.length){
+    const pts=hs.length>1 ? hs : [hs[0], {ep:acMain.L.progress(), s:hs[0].s}], labels=[];
+    AC_AX.forEach(([name,col],k)=>{ const e=acLine(c2, g2, pts.map(h=>[h.ep,h.s[k]]), col); labels.push({x:e.x,y:e.y,t:pts.at(-1).s[k].toFixed(2)}); });
+    acLabels(c2, g2, labels);
+  }
+}
+function setupAC(){
+  const $=id=>document.getElementById(id);
+  $('acStdLegend').innerHTML=AC_AX.map(([n,col])=>'<span><span class="k" style="background:'+col+'"></span>'+n+'</span>').join('');
+  $('acLam').textContent=acApi().AC.lambda; $('acRs').textContent=acApi().AC.rScale;
+  $('acRunBtn').onclick=()=>{ if(!acMain) resetAC(); acRun=!acRun; updateACRunBtn(); renderACStats(); };
+  $('acResetBtn').onclick=resetAC;
+  $('acDuelBtn').onclick=()=>{ if(acMain) setMode('acMain'); };
+  const cv=$('acCurve'), tip=$('acTip');
+  const show=clientX=>{
+    if(!acMain || !acMain.curve.length) return;
+    const g=acGeom(cv,1), rect=cv.getBoundingClientRect(), v=(clientX-rect.left-g.L)/g.pw*g.maxEp;
+    let h=acMain.curve[0]; acMain.curve.forEach(x=>{ if(Math.abs(x.ep-v)<Math.abs(h.ep-v)) h=x; });
+    acHover=h.ep; drawACCharts();
+    tip.textContent='';
+    const line=t=>{ const d=document.createElement('div'); d.innerHTML=t; tip.appendChild(d); };
+    line('<b>'+h.ep+'판</b> · 공 '+h.balls+'개 · '+h.n+'점');
+    line('<span class="k" style="background:#e05a9a"></span><b>'+pctR(h.win)+'</b> 승률 (z='+h.z.toFixed(1)+')');
+    line('<span class="k" style="background:#4fc3f7"></span><b>'+pctR(h.ret)+'</b> 받기 · 넘기기 '+pctR(h.over));
+    tip.style.display='block';
+    const x=g.X(h.ep), tw=tip.offsetWidth;
+    tip.style.left=Math.max(0, x+12+tw<=g.W ? x+12 : x-12-tw)+'px'; tip.style.top=g.T+'px';
+  };
+  cv.addEventListener('pointermove', e=>show(e.clientX));
+  cv.addEventListener('pointerdown', e=>show(e.clientX));
+  cv.addEventListener('pointerleave', ()=>{ acHover=null; tip.style.display='none'; drawACCharts(); });
+}
+
 // ===== 루프 =====
 function animate(){
   requestAnimationFrame(animate);
@@ -1930,6 +2320,7 @@ function animate(){
   if(fast){ runFast(10); uiDirty=true; }
   if(cmpRun){ runCmp(8); uiDirty=true; }
   if(evoMainRun){ runEvoMain(8); uiDirty=true; }
+  if(acRun){ runACMain(8); uiDirty=true; }
   maybeEvaluate();
   runJobs(running||fast ? 6 : 14);                           // 평가는 프레임마다 조금씩(경기 중엔 6ms)
   syncScene();
@@ -1974,6 +2365,7 @@ function boot(){
   setupEvoHover();
   document.querySelectorAll('#tabs button').forEach(b=> b.onclick=()=>setScreen(b.dataset.scr));
   // 🧬 진화 탭
+  setupAC();
   fitCanvas=$('evoFitCurve'); eGen=$('eGen'); eFit=$('eFit'); eVsPrev=$('eVsPrev'); eVsU=$('eVsU'); evoStatus=$('evoStatus');
   setupFitHover();
   $('evoRunBtn').onclick=()=>{ evoMainRun=!evoMainRun; updateEvoRunBtn(); renderEvoMainStats(); };
