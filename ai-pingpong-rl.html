@@ -187,29 +187,26 @@
   </div>
 
   <div id="evoPanel">
-    <div class="ph"><b>⚖️ 진화 vs 강화학습 비교</b></div>
-    <div class="ptitle">같은 경험(친 판 수)을 주고 어느 쪽이 더 빨리 배우는지 비교합니다. 평가는 둘 다 미학습 로봇과 100점</div>
+    <div class="ph"><b>⚖️ 학습 방법 비교</b></div>
+    <div class="ptitle">같은 경험(로봇에게 날아온 공 수)을 주고 어느 방법이 더 빨리 배우는지 비교합니다. 평가는 모두 미학습 로봇과 100점</div>
     <div class="pbtns"><button id="cmpRunBtn" class="primary">▶ 비교 학습 시작</button><button id="cmpResetBtn">↺ 처음부터</button></div>
     <div id="cmpStatus" class="pnote" style="margin-top:4px"></div>
     <div class="seg" id="cmpMetricSeg"><button data-metric="ret" class="on">받기 성공률</button><button data-metric="win">승률</button><button data-metric="over">넘기기 성공률</button></div>
-    <div class="legend"><span><span class="k kRL"></span>🎓 강화학습(Q-러닝)</span><span><span class="k kEV"></span>🧬 진화(신경망+자연 선택)</span></div>
+    <div class="legend" id="cmpLegend"></div>
     <div class="chartWrap">
-      <canvas id="evoCurve" aria-label="경험한 판 수에 따른 성적(미학습 로봇 상대): 강화학습과 진화 비교"></canvas>
+      <canvas id="evoCurve" aria-label="경험한 공 수에 따른 성적(미학습 로봇 상대): 학습 방법 비교"></canvas>
       <div id="evoTip"></div>
     </div>
     <table class="cmpgrid">
       <thead><tr><th></th><th>경험</th><th>승률</th><th>받기</th><th>넘기기</th></tr></thead>
-      <tbody>
-        <tr><td><span class="key k1"></span>🎓 강화학습</td><td id="cRLpts">–</td><td id="cRLwin">–</td><td id="cRLret">–</td><td id="cRLover">–</td></tr>
-        <tr><td><span class="key" style="background:#d95926"></span>🧬 진화</td><td id="cEVpts">–</td><td id="cEVwin">–</td><td id="cEVret">–</td><td id="cEVover">–</td></tr>
-      </tbody>
+      <tbody id="cmpRows"></tbody>
     </table>
     <div class="pbtns"><button id="duelBtn">⚔️ 3D 대결 새로고침</button><button id="h2hBtn">🔬 직접 대결 (200점)</button></div>
     <div id="h2h" class="pnote"></div>
     <div class="pnote">
-      <b>🎓 강화학습</b>: 한 로봇(Q-테이블)이 셀프플레이로 매 판 보상을 받으며 바로바로 고쳐 나감(TD 학습).<br>
-      <b>🧬 진화</b>: 신경망 뇌 <b id="evoSize"></b>개가 한 세대. 볼 머신 연속 받기 점수 상위 25%만 살아남고, 돌연변이 자식으로 다음 세대를 만듦(경기 중엔 학습 안 함). 진화의 경험 = 볼 머신이 쏜 공 수.<br>
-      3D 화면: 🔵 블루 = 강화학습 로봇, 🔴 레드 = 진화 최고 개체. 평가는 둘 다 미학습 로봇과 100점(ε=0)으로 똑같이.
+      <span id="cmpNotes"></span>
+      경험 = 로봇에게 날아와 받아야 했던 공 수(셀프플레이는 양쪽 로봇이 받은 공을 모두 셈). 경험이 가장 적은 방법부터 번갈아 학습합니다.<br>
+      3D 화면: 🔵 블루 = 목록 첫 번째 방법, 🔴 레드 = 두 번째 방법. 평가는 모두 미학습 로봇과 100점(ε=0)으로 똑같이.
     </div>
   </div>
 
@@ -392,7 +389,7 @@ function observe(p,s){
 }
 
 // ===== 뇌 = 축별 Q-테이블 5개 (x·y·z·손목 2축이 같은 보상을 받아 각자 학습) =====
-function makeBrain(){ const q={}; AXES.forEach(ax=>q[ax]={}); return { q, eps:CFG.epsStart, epsLock:false, frozen:false, episodes:0, updates:0, tdAvg:0 }; }
+function makeBrain(){ const q={}; AXES.forEach(ax=>q[ax]={}); return { q, eps:CFG.epsStart, epsLock:false, frozen:false, episodes:0, balls:0, updates:0, tdAvg:0 }; }
 function cloneBrain(b,over){
   if(b.type==='nn') return Object.assign({}, b, {w:b.w.slice()}, over||{});
   const q={}; AXES.forEach(ax=>{ const o={}, t=b.q[ax]||{}; for(const k in t) o[k]=t[k].slice(); q[ax]=o; });
@@ -735,6 +732,8 @@ class Match {
         }
         if(b.bounceOnExpect===1){
           b.canReturn=true;
+          const rv=b.expectSide>0? p2:p1;                              // 받을 공이 하나 날아옴 = 경험한 공 +1 (방법 간 비교의 공통 단위)
+          if(!rv.brain.frozen) rv.brain.balls=(rv.brain.balls||0)+1;
           const h=b.lastHitter;
           if(h.flight){                                                 // 내 타구가 상대 코트에 들어감 = 넘김 성공
             h.flight=false; h.overs++;
@@ -858,7 +857,7 @@ function trainSelfPlay(brain, nPoints, match){
 // =====================================================================
 const NN_IN=16, NN_H=12, NN_OUT=5, NN_SIZE=NN_IN*NN_H+NN_H+NN_H*NN_OUT+NN_OUT;
 function randGenes(sd){ const w=new Array(NN_SIZE); for(let i=0;i<NN_SIZE;i++) w[i]=randn()*(sd||0.6); return w; }
-function makeNNBrain(w){ return { type:'nn', w:w||randGenes(), frozen:true, eps:0, episodes:0, updates:0, tdAvg:0, q:{} }; }
+function makeNNBrain(w){ return { type:'nn', w:w||randGenes(), frozen:true, eps:0, episodes:0, balls:0, updates:0, tdAvg:0, q:{} }; }
 const _nnIn=new Array(NN_IN), _nnH=new Array(NN_H);
 function nnFeatures(o){
   const f=_nnIn, inc=o.incoming;
@@ -944,9 +943,71 @@ class Evolution {
   bestBrain(){ return makeNNBrain((this.best||this.pop[0].w).slice()); }
 }
 
+// =====================================================================
+//  📋 학습 방법 목록 (레지스트리) — 계획: docs/PLAN.md
+//  학습 방법마다 아래 구역처럼 registerMethod로 항목 하나를 추가한다.
+//  ⚖️ 비교 탭과 verify-learning.js(--method)가 이 목록을 읽어 곡선·표·검증을 만든다.
+//  → 새 방법은 자기 구역(// ── 방법: … ──)만 추가하면 되고, 다른 방법의 구역은 건드리지 않는다.
+//
+//  항목(def): id, icon, name(이름), color(곡선 색), note(비교 탭 설명 한 줄),
+//             defaultTrain(검증 기본 학습량, unit 기준), checkpoints(검증 체크포인트, unit 기준),
+//             create(opt) → 학습기, summary(학습기)?(검증 끝에 찍을 한 줄)
+//  학습기(learner):
+//    unit            진행 단위 이름('판', '세대' …)
+//    progress()      진행량(unit 기준)
+//    balls()         경험한 공 수 = 로봇에게 날아와 받아야 했던 공 수. 방법 간 비교의 공통 가로축
+//    run(maxSteps)   물리 스텝 약 maxSteps개만큼 학습하고 돌아옴(화면이 멈추지 않게 조금씩)
+//    trainTo(n)      progress()가 n이 될 때까지 학습(헤드리스·검증용)
+//    brain()         지금 평가할 뇌(평가 때 복사해서 학습 정지·ε=0으로 씀)
+//    label()         화면 표시용 진행 상태(예: '1200판', '12세대')
+// =====================================================================
+const METHODS=[];
+function registerMethod(def){ if(METHODS.some(m=>m.id===def.id)) throw new Error('학습 방법 id 중복: '+def.id); METHODS.push(def); return def; }
+function getMethod(id){ return METHODS.find(m=>m.id===id)||null; }
+
+// ── 방법: q — 🎓 축별 Q-러닝(TD(0)) 셀프플레이 ──
+registerMethod({
+  id:'q', icon:'🎓', name:'강화학습(Q-러닝)', color:'#3987e5',
+  note:'한 로봇(Q-테이블)이 셀프플레이로 매 판 보상을 받으며 바로바로 고쳐 나감(TD 학습).',
+  defaultTrain:5000, checkpoints:[0,250,500,1000,1500,2000,3000,5000,8000,12000,20000],
+  create(){
+    const br=makeBrain(); let match=null;
+    return {
+      unit:'판', brain:()=>br, progress:()=>br.episodes, balls:()=>br.balls,
+      run(n){ if(!match) match=new Match(br,br); for(let i=0;i<n;i++) match.step(); },
+      trainTo(n){ match=trainSelfPlay(br, n-br.episodes, match); },
+      label:()=>br.episodes+'판',
+    };
+  },
+  summary(L){
+    const br=L.brain(), sc=stateCounts(br);
+    return 'Q-테이블 상태 수: x '+sc.x+' · y '+sc.y+' · z '+sc.z+' · 손목 위아래 '+sc.p+' · 손목 좌우 '+sc.w+', TD 업데이트 '+br.updates+'회';
+  },
+});
+
+// ── 방법: evo — 🧬 신경망 + 자연 선택(유전 알고리즘), 🎾 볼 머신 테스트로 선택 ──
+registerMethod({
+  id:'evo', icon:'🧬', name:'진화(신경망+자연 선택)', color:'#d95926',
+  note:'신경망 뇌 24개가 한 세대. 볼 머신 연속 받기 점수 상위 25%만 살아남고, 돌연변이 자식으로 다음 세대를 만듦(경기 중엔 학습 안 함).',
+  defaultTrain:30, checkpoints:[0,2,5,10,15,20,30,40,60,80,120],
+  create(opt){
+    const evo=new Evolution(opt);
+    return {
+      unit:'세대', evo, brain:()=>evo.bestBrain(), progress:()=>evo.gen, balls:()=>evo.points,
+      run(n){ evo.run(n); },
+      trainTo(g){ while(evo.gen<g) evo.run(1e6); },
+      label:()=>evo.gen+'세대',
+    };
+  },
+  summary(L){
+    const h=L.evo.history.at(-1);
+    return h ? '마지막 세대: 최고 점수 '+h.best.toFixed(2)+' · 평균 '+h.mean.toFixed(2)+' · 최고 개체 연속 평균 '+h.bestAvgStreak.toFixed(1)+'개' : '아직 세대가 끝나지 않음';
+  },
+});
+
 function stateCounts(brain){ const c={}; AXES.forEach(ax=>c[ax]=Object.keys(brain.q[ax]||{}).length); return c; }
 
-root.PongRL={ Match, EvalJob, Evolution, MACHINE, makeNNBrain, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
+root.PongRL={ Match, EvalJob, Evolution, MACHINE, METHODS, registerMethod, getMethod, makeNNBrain, makeBrain, cloneBrain, evaluate, trainSelfPlay, stateCounts, CFG, VLEV, AXES, ACT_NAMES,
   D:{TL,TW,NET_H,halfL,halfW,R,FLOOR_Y,HOMEX,ARM_BASE_X,WIN_POINTS,RALLY_CAP,REACT,REACT_FAST,BLADE_W,BLADE_H,BLADE_T,HANDLE_L,HANDLE_W,HANDLE_D},
   setRandom(f){ rand=f; } };
 })(typeof window!=='undefined'?window:globalThis);
@@ -1137,9 +1198,10 @@ function setMode(m){
     duelMain={gen:evoMain.gen};
     game=new Match(evoMain.bestBrain(), MACHINE, hooks, {drill:{loop:true}});
   } else if(m==='evo'){
-    // 🧬 비교 화면: 블루 = 비교용 강화학습 로봇(복사본, ε=0), 레드 = 진화 최고 개체
-    duelInfo={rl:cmpBrain.episodes, gen:evo.gen};
-    game=new Match(cloneBrain(cmpBrain,{frozen:true,eps:0}), evo.bestBrain(), hooks);
+    // ⚖️ 비교 화면: 블루 = 목록 첫 번째 방법, 레드 = 두 번째 방법 (둘 다 복사본, 학습 정지·ε=0)
+    const [A,B]=cmpItems;
+    duelInfo={a:A.def.icon+' '+shortOf(A.def)+'('+A.L.label()+')', b:shortOf(B.def)+'('+B.L.label()+') '+B.def.icon, aIcon:A.def.icon, bIcon:B.def.icon, aName:shortOf(A.def), bName:shortOf(B.def)};
+    game=new Match(cloneBrain(A.L.brain(),{frozen:true,eps:0}), cloneBrain(B.L.brain(),{frozen:true,eps:0}), hooks);
   } else if(m==='verify'){
     // 블루 = 지금까지 학습한 뇌의 복사본(학습 정지, ε=0), 레드 = 빈 Q-테이블. 물리·규칙·코드는 완전히 동일
     verifyEp=brain.episodes;
@@ -1152,7 +1214,7 @@ function setMode(m){
   syncScene(); uiDirty=true;
 }
 function nameOf(p){
-  if(mode==='evo') return p===game.p1?'🎓 강화학습 로봇':'🧬 진화 로봇';
+  if(mode==='evo') return p===game.p1? duelInfo.aIcon+' '+duelInfo.aName : duelInfo.bIcon+' '+duelInfo.bName;
   if(mode==='evoMain') return p===game.p1?'🧬 최고 개체':'🎾 볼 머신';
   if(mode==='verify') return p===game.p1?'🎓 학습 로봇':'🐣 미학습 로봇';
   return p===game.p1?'🔵 블루':'🔴 레드';
@@ -1237,8 +1299,8 @@ function updateUI(){
   g1.textContent=p1.games; g2.textContent=p2.games;
   sm1.textContent=p1.smashWins; sv1.textContent=p1.saves; er1.textContent=p1.err; rt1.textContent=pct(p1.hits,p1.hits+p1.misses); ov1.textContent=pct(p1.overs,p1.hits);
   sm2.textContent=p2.smashWins; sv2.textContent=p2.saves; er2.textContent=p2.err; rt2.textContent=pct(p2.hits,p2.hits+p2.misses); ov2.textContent=pct(p2.overs,p2.hits);
-  n1.textContent = mode==='evoMain' ? '🧬 '+duelMain.gen+'세대 최고' : mode==='evo' ? '🎓 강화학습('+duelInfo.rl+'판)' : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
-  n2.textContent = mode==='evoMain' ? '볼 머신 🎾' : mode==='evo' ? '진화 '+duelInfo.gen+'세대 🧬' : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
+  n1.textContent = mode==='evoMain' ? '🧬 '+duelMain.gen+'세대 최고' : mode==='evo' ? duelInfo.a : mode==='verify' ? '🎓 학습 로봇('+verifyEp+'판)' : '🔵 블루 로봇';
+  n2.textContent = mode==='evoMain' ? '볼 머신 🎾' : mode==='evo' ? duelInfo.b : mode==='verify' ? '미학습 로봇 🐣' : '레드 로봇 🔴';
   setn.textContent=p1.games+p2.games+1;
   const b=game.b;
   srv.textContent = (b.serve ? b.lastHitter : game.currentServer())===p1 ? '🔵' : '🔴';
@@ -1254,7 +1316,7 @@ function updateUI(){
     modeRow.innerHTML='🎾 볼 머신 테스트 · 연속 <b>'+d.streak+'</b>개 · 공 속도 ×'+d.level.toFixed(2)+' · 점수 '+d.score.toFixed(1)+' · 최고 연속 <b>'+d.best+'</b>개 ('+d.runs+'회 시도)';
   } else if(mode==='evo'){
     const n=p1.pointsWon+p2.pointsWon;
-    modeRow.innerHTML='🧬 진화 vs 🎓 강화학습 대결 · 🎓 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점)';
+    modeRow.innerHTML='⚖️ 비교 대결 · '+duelInfo.aIcon+' 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점)';
   } else if(mode==='verify'){
     const n=p1.pointsWon+p2.pointsWon;
     modeRow.innerHTML='⚔️ 검증 대결 · 🎓 득점률 <b>'+pct(p1.pointsWon,n)+'</b> ('+n+'점) · 학습 정지(ε=0)';
@@ -1306,8 +1368,10 @@ function runJobs(budgetMs){
       const e=cmpJobs[0];
       if(e.job.run(400)){
         cmpJobs.shift(); const r=e.job.r;
-        cmpCurve[e.who].push({pts:e.pts, gen:e.gen, win:r.winRateA, ret:r.retA, over:r.overA, n:r.n});
-        cmpCurve[e.who].sort((a,b)=>a.pts-b.pts);
+        if(cmpItems.includes(e.item)){                                    // ↺ 처음부터 이전에 시작한 평가는 버림
+          e.item.curve.push({pts:e.pts, label:e.label, win:r.winRateA, ret:r.retA, over:r.overA, n:r.n});
+          e.item.curve.sort((a,b)=>a.pts-b.pts);
+        }
         renderEvo();
       }
     } else if(h2hJob){
@@ -1484,29 +1548,45 @@ function renderObs(){
 }
 
 // =====================================================================
-//  🧬 진화 vs 🎓 강화학습 비교 화면
-//  두 방식에 같은 경험(시뮬레이션한 판 수)을 번갈아 주고, 1000판마다 미학습 로봇과 100점 평가(EvalJob, 화면 안 멈춤)
+//  ⚖️ 학습 방법 비교 화면 — 학습 방법 목록(PongRL.METHODS)에 있는 방법을 모두 나란히 학습
+//  방법마다 같은 경험(로봇에게 날아온 공 수)을 번갈아 주고, 공 1000개마다 미학습 로봇과 100점 평가(EvalJob, 화면 안 멈춤)
+//  새 방법은 코어의 registerMethod 항목만 추가하면 곡선·표·설명에 자동으로 들어온다
 // =====================================================================
-let evoOn=false, evo=null, cmpBrain=null, cmpMatch=null, cmpRun=false, cmpCurve={rl:[],evo:[]}, cmpNext={rl:0,evo:0}, cmpJobs=[], h2hJob=null;
-let prevMode='train', duelInfo={rl:0,gen:0}, evoHover=null, cmpMetric='ret';   // 차트 지표: ret=받기, win=승률, over=넘기기
-const CMP_EVERY=1000;
+let evoOn=false, cmpItems=null, cmpRun=false, cmpJobs=[], h2hJob=null;   // cmpItems: [{def, L(학습기), curve:[], next}]
+let prevMode='train', duelInfo={a:'',b:'',aIcon:'',bIcon:'',aName:'',bName:''}, evoHover=null, cmpMetric='ret';   // 차트 지표: ret=받기, win=승률, over=넘기기
+const CMP_EVERY=1000;   // 평가 간격(경험한 공 수)
+const shortOf=def=>def.name.replace(/\(.*\)$/,'');   // '강화학습(Q-러닝)' → '강화학습' (점수판·표용 짧은 이름)
 function resetCmp(){
-  evo=new Evolution(); cmpBrain=makeBrain(); cmpMatch=new Match(cmpBrain,cmpBrain);
-  cmpCurve={rl:[],evo:[]}; cmpNext={rl:0,evo:0}; cmpJobs=[]; h2hJob=null; h2hEl.textContent='';
-  cmpCheck(); renderEvo();
+  cmpItems=PongRL.METHODS.map(def=>({def, L:def.create(), curve:[], next:0}));
+  cmpJobs=[]; h2hJob=null; h2hEl.textContent='';
+  buildCmpRows(); cmpCheck(); renderEvo();
 }
 function cmpCheck(){
-  if(cmpBrain.episodes>=cmpNext.rl){ cmpJobs.push({who:'rl', pts:cmpBrain.episodes, job:new EvalJob(cmpBrain, UNTRAINED, EVAL_POINTS)}); cmpNext.rl=cmpBrain.episodes+CMP_EVERY; }
-  if(evo.points>=cmpNext.evo){ cmpJobs.push({who:'evo', pts:evo.points, gen:evo.gen, job:new EvalJob(evo.bestBrain(), UNTRAINED, EVAL_POINTS)}); cmpNext.evo=evo.points+CMP_EVERY; }
+  for(const it of cmpItems){
+    const b=it.L.balls();
+    if(b>=it.next){ cmpJobs.push({item:it, pts:b, label:it.L.label(), job:new EvalJob(it.L.brain(), UNTRAINED, EVAL_POINTS)}); it.next=b+CMP_EVERY; }
+  }
 }
-// 경험이 적은 쪽을 먼저 돌려서 두 방식의 경험량을 맞춤
+// 경험(공 수)이 가장 적은 방법을 먼저 돌려서 경험량을 맞춤
 function runCmp(budgetMs){
   const t0=performance.now();
   while(performance.now()-t0<budgetMs){
     if(cmpJobs.length>=3) break;                          // 평가가 밀리면 기다림
-    if(cmpBrain.episodes<=evo.points){ for(let i=0;i<300;i++) cmpMatch.step(); }
-    else evo.run(300);
+    let low=cmpItems[0]; for(const it of cmpItems) if(it.L.balls()<low.L.balls()) low=it;
+    low.L.run(300);
     cmpCheck();
+  }
+}
+// 범례·표·설명을 방법 목록으로 만듦 (cell = 표의 칸 DOM)
+function buildCmpRows(){
+  const esc=t=>String(t).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  document.getElementById('cmpLegend').innerHTML=cmpItems.map(it=>'<span><span class="k" style="background:'+it.def.color+'"></span>'+it.def.icon+' '+esc(it.def.name)+'</span>').join('');
+  document.getElementById('cmpNotes').innerHTML=cmpItems.map(it=>'<b>'+it.def.icon+' '+esc(it.def.name)+'</b>: '+esc(it.def.note)+'<br>').join('');
+  const tb=document.getElementById('cmpRows'); tb.textContent='';
+  for(const it of cmpItems){
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td><span class="key" style="background:'+it.def.color+'"></span>'+it.def.icon+' '+esc(shortOf(it.def))+'</td><td>–</td><td>–</td><td>–</td><td>–</td>';
+    tb.appendChild(tr); it.cells=[...tr.children].slice(1);
   }
 }
 // ===== 화면(탭) 전환: 🧬 진화 / 🎓 강화 / ⚖️ 비교 =====
@@ -1517,7 +1597,7 @@ function setScreen(scr){
   document.body.classList.toggle('scr-evo', scr==='evo');
   document.body.classList.toggle('scr-cmp', scr==='cmp');
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.scr===scr));
-  if(scr==='cmp'){ if(!evo) resetCmp(); setMode('evo'); renderEvo(); }
+  if(scr==='cmp'){ if(!cmpItems) resetCmp(); setMode('evo'); renderEvo(); }
   else if(scr==='evo'){ if(!evoMain) resetEvoMain(); setMode('evoMain'); renderEvoMain(); }
   else setMode(rlMode==='evo'||rlMode==='evoMain' ? 'train' : rlMode);
   layout();
@@ -1554,7 +1634,7 @@ function renderEvoMainStats(){
   evoStatus.textContent=(evoMainRun?'진화 중… ':'정지됨 · ')+evoMain.gen+'세대 평가 '+Math.round(100*done)+'% · 생존 '+Math.round(100*evoMain.survive)+'% ('+Math.max(2,Math.round(evoMain.size*evoMain.survive))+'/'+evoMain.size+'개체)';
 }
 function renderEvoMain(){ renderEvoMainStats(); drawFitCurve(); }
-const C_MEAN='#8a9bbd';
+const C_MEAN='#8a9bbd', C_EV='#d95926';   // 진화 탭 차트 색(최고 개체·평균)
 function fitGeom(){
   const cv=fitCanvas, W=cv.clientWidth||300, H=cv.clientHeight||150, L=40, Rp=36, T=10, B=20, pw=W-L-Rp, ph=H-T-B;
   const hs=evoMain? evoMain.history : [];
@@ -1610,23 +1690,23 @@ function setupFitHover(){
 function updateCmpBtn(){ const b=document.getElementById('cmpRunBtn'); b.textContent=cmpRun?'⏸ 비교 학습 정지':'▶ 비교 학습 시작'; }
 const pctR=v=>Math.round(100*v)+'%';
 function renderEvoStats(){
-  if(!evo) return;
-  const rl=cmpCurve.rl.at(-1), ev=cmpCurve.evo.at(-1);
-  cRLpts.textContent=cmpBrain.episodes+'판'; cEVpts.textContent=evo.points+'판 · '+evo.gen+'세대';
-  cRLwin.textContent=rl?pctR(rl.win):'–'; cRLret.textContent=rl?pctR(rl.ret):'–'; cRLover.textContent=rl?pctR(rl.over):'–';
-  cEVwin.textContent=ev?pctR(ev.win):'–'; cEVret.textContent=ev?pctR(ev.ret):'–'; cEVover.textContent=ev?pctR(ev.over):'–';
-  cmpStatus.textContent=(cmpRun?'학습 중… ':'정지됨 · ')+'진화: 세대당 개체 '+evo.size+'개, 최고 적합도 '+(isFinite(evo.bestFit)?evo.bestFit.toFixed(0):'–')+'(판당 보상)'+(cmpJobs.length?' · 평가 중…':'');
+  if(!cmpItems) return;
+  for(const it of cmpItems){
+    const c=it.cells, last=it.curve.at(-1);
+    c[0].textContent='공 '+it.L.balls()+' · '+it.L.label();
+    c[1].textContent=last?pctR(last.win):'–'; c[2].textContent=last?pctR(last.ret):'–'; c[3].textContent=last?pctR(last.over):'–';
+  }
+  cmpStatus.textContent=(cmpRun?'학습 중… ':'정지됨 · ')+'학습 방법 '+cmpItems.length+'개'+(cmpJobs.length?' · 평가 중…':'');
 }
 function renderEvo(){ renderEvoStats(); drawEvoCurve(); }
-// 비교 차트: 두 계열(강화학습·진화) + 50% 기준선, 끝점 값 라벨, 호버 크로스헤어
-const C_RL='#3987e5', C_EV='#d95926';
+// 비교 차트: 방법마다 한 계열 + 50% 기준선, 끝점 값 라벨, 호버 크로스헤어
 function evoGeom(){
   const cv=evoCanvas, W=cv.clientWidth||300, H=cv.clientHeight||150, L=34, Rp=36, T=10, B=20, pw=W-L-Rp, ph=H-T-B;
-  const maxPts=Math.max(2000, ...cmpCurve.rl.map(c=>c.pts), ...cmpCurve.evo.map(c=>c.pts));
+  const maxPts=Math.max(2000, ...(cmpItems||[]).flatMap(it=>it.curve.map(c=>c.pts)));
   return {W,H,L,T,pw,ph,maxPts, X:v=>L+v/maxPts*pw, Y:v=>T+(1-v)*ph};
 }
 function drawEvoCurve(){
-  const cv=evoCanvas; if(!cv || !evoOn) return;
+  const cv=evoCanvas; if(!cv || !evoOn || !cmpItems) return;
   const g=evoGeom(), dpr=Math.min(devicePixelRatio||1,2);
   if(cv.width!==Math.round(g.W*dpr) || cv.height!==Math.round(g.H*dpr)){ cv.width=Math.round(g.W*dpr); cv.height=Math.round(g.H*dpr); }
   const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,g.W,g.H);
@@ -1635,18 +1715,19 @@ function drawEvoCurve(){
   c.font='10px "Segoe UI","Malgun Gothic",sans-serif'; c.fillStyle=C_MUTED; c.textAlign='right'; c.textBaseline='middle';
   [0,0.5,1].forEach(v=>c.fillText(Math.round(v*100)+'%', g.L-5, g.Y(v)));
   if(cmpMetric==='win'){ c.textBaseline='bottom'; c.fillText('50% = 미학습과 같음', g.L+g.pw, g.Y(0.5)-2); }
-  c.textBaseline='top'; c.textAlign='left'; c.fillText('0', g.L, g.T+g.ph+5); c.textAlign='right'; c.fillText('경험 '+g.maxPts+'판', g.L+g.pw, g.T+g.ph+5);
+  c.textBaseline='top'; c.textAlign='left'; c.fillText('0', g.L, g.T+g.ph+5); c.textAlign='right'; c.fillText('경험 공 '+g.maxPts+'개', g.L+g.pw, g.T+g.ph+5);
   const labels=[];
-  [['rl',C_RL],['evo',C_EV]].forEach(([k,col])=>{
-    const d=cmpCurve[k]; if(!d.length) return;
+  cmpItems.forEach(it=>{
+    const d=it.curve, col=it.def.color; if(!d.length) return;
     c.strokeStyle=col; c.lineWidth=2; c.lineJoin='round'; c.lineCap='round'; c.beginPath();
     d.forEach((p,i)=>{ const x=g.X(p.pts), y=g.Y(p[cmpMetric]); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
     const last=d.at(-1), x=g.X(last.pts), y=g.Y(last[cmpMetric]);
     c.fillStyle=C_SURF; c.beginPath(); c.arc(x,y,6,0,7); c.fill(); c.fillStyle=col; c.beginPath(); c.arc(x,y,4,0,7); c.fill();
     labels.push({x, y, t:Math.round(100*last[cmpMetric])+'%'});
   });
-  // 끝점 라벨: 겹치면 위아래로 벌림
-  if(labels.length===2 && Math.abs(labels[0].y-labels[1].y)<12){ const up=labels[0].y<=labels[1].y?0:1; labels[up].y-=7; labels[1-up].y+=7; }
+  // 끝점 라벨: 겹치면 위아래로 벌림 (위에서부터 12px 간격 확보)
+  labels.sort((a,b)=>a.y-b.y);
+  for(let i=1;i<labels.length;i++) if(labels[i].y-labels[i-1].y<12){ const mid=(labels[i].y+labels[i-1].y)/2; labels[i-1].y=Math.min(labels[i-1].y,mid-6); labels[i].y=labels[i-1].y+12; }
   c.fillStyle=C_TEXT; c.font='600 11px "Segoe UI","Malgun Gothic",sans-serif'; c.textAlign='left'; c.textBaseline='middle';
   labels.forEach(l=>c.fillText(l.t, l.x+8, Math.min(g.T+g.ph-4, Math.max(g.T+4, l.y))));
   if(evoHover!=null){ const x=Math.round(g.X(evoHover))+0.5; c.strokeStyle=C_MUTED; c.lineWidth=1; c.beginPath(); c.moveTo(x,g.T); c.lineTo(x,g.T+g.ph); c.stroke(); }
@@ -1655,16 +1736,18 @@ function setupEvoHover(){
   const tip=document.getElementById('evoTip');
   const near=(d,v)=>{ let b=null; d.forEach(p=>{ if(!b||Math.abs(p.pts-v)<Math.abs(b.pts-v)) b=p; }); return b; };
   const show=clientX=>{
-    const all=cmpCurve.rl.concat(cmpCurve.evo); if(!all.length) return;
+    if(!cmpItems) return;
+    const all=cmpItems.flatMap(it=>it.curve); if(!all.length) return;
     const g=evoGeom(), rect=evoCanvas.getBoundingClientRect(), v=(clientX-rect.left-g.L)/g.pw*g.maxPts;
     const snap=near(all,v).pts; evoHover=snap; drawEvoCurve();
-    const a=near(cmpCurve.rl,snap), b=near(cmpCurve.evo,snap);
     tip.textContent='';
     const line=h=>{ const d=document.createElement('div'); d.innerHTML=h; tip.appendChild(d); };
-    line('<b>경험 약 '+snap+'판</b>');
+    line('<b>경험 공 약 '+snap+'개</b>');
     const mName={ret:'받기',win:'승률',over:'넘기기'}[cmpMetric];
-    if(a) line('<span class="k kRL"></span><b>'+pctR(a[cmpMetric])+'</b> 강화학습 '+mName+' · 승률 '+pctR(a.win)+'(n='+a.n+')');
-    if(b) line('<span class="k kEV"></span><b>'+pctR(b[cmpMetric])+'</b> 진화 '+mName+' · 승률 '+pctR(b.win)+'(n='+b.n+') · '+b.gen+'세대');
+    for(const it of cmpItems){
+      const a=near(it.curve,snap); if(!a) continue;
+      line('<span class="k" style="background:'+it.def.color+'"></span><b>'+pctR(a[cmpMetric])+'</b> '+it.def.icon+' '+mName+' · 승률 '+pctR(a.win)+'(n='+a.n+') · '+a.label);
+    }
     tip.style.display='block';
     const x=g.X(snap), tw=tip.offsetWidth;
     tip.style.left=Math.max(0, x+12+tw<=g.W ? x+12 : x-12-tw)+'px'; tip.style.top=g.T+'px';
@@ -1674,13 +1757,14 @@ function setupEvoHover(){
   evoCanvas.addEventListener('pointerleave', ()=>{ evoHover=null; tip.style.display='none'; drawEvoCurve(); });
 }
 function runH2H(){
-  if(h2hJob||!evo) return;
-  h2hJob={rl:cmpBrain.episodes, gen:evo.gen, job:new EvalJob(cmpBrain, evo.bestBrain(), 200)};
+  if(h2hJob||!cmpItems) return;
+  const [A,B]=cmpItems;
+  h2hJob={a:A.def.icon+' '+shortOf(A.def)+'('+A.L.label()+')', b:B.def.icon+' '+shortOf(B.def)+'('+B.L.label()+')', job:new EvalJob(A.L.brain(), B.L.brain(), 200)};
   h2hEl.textContent='🔬 직접 대결 중…';
 }
 function showH2H(j){
   const r=j.job.r;
-  h2hEl.textContent='🔬 강화학습('+j.rl+'판) vs 진화('+j.gen+'세대) '+r.n+'점: 강화학습 승률 '+pctR(r.winRateA)+' · 받기 '+pctR(r.retA)+' / '+pctR(r.retB)+(r.n<20?' (결정된 점수가 적어 오차가 큼)':'');
+  h2hEl.textContent='🔬 '+j.a+' vs '+j.b+' '+r.n+'점: 앞쪽 승률 '+pctR(r.winRateA)+' · 받기 '+pctR(r.retA)+' / '+pctR(r.retB)+(r.n<20?' (결정된 점수가 적어 오차가 큼)':'');
 }
 function toggleHide(){
   const on=document.body.classList.toggle('hideui');
@@ -1719,7 +1803,7 @@ function animate(){
 let s1,s2,g1,g2,n1,n2,setn,lead,srv,sm1,sm2,sv1,sv2,er1,er2,rt1,rt2,ov1,ov2,ep,eps,rallyEl,avg,spark,fbEl,modeRow;
 let epsSlider,epsVal,epsLockChk;
 let fitCanvas,eGen,eFit,eVsPrev,eVsU,evoStatus;
-let evoCanvas,h2hEl,cRLpts,cEVpts,cRLwin,cRLret,cRLover,cEVwin,cEVret,cEVover,cmpStatus;
+let evoCanvas,h2hEl,cmpStatus;
 let curveCanvas,tWin,tWinSub,tRetT,tRetU,tOvT,tOvU,verdictEl,fastProg,benchEl,nX,nY,nZ,nP,nW,tdErr,obsHead,obsBody;
 function boot(){
   if(typeof THREE==='undefined') return;
@@ -1744,8 +1828,6 @@ function boot(){
   $('modeVerify').onclick=()=>setMode('verify');
   // 🧬 진화 비교 화면
   evoCanvas=$('evoCurve'); h2hEl=$('h2h'); cmpStatus=$('cmpStatus');
-  cRLpts=$('cRLpts'); cEVpts=$('cEVpts'); cRLwin=$('cRLwin'); cRLret=$('cRLret'); cRLover=$('cRLover'); cEVwin=$('cEVwin'); cEVret=$('cEVret'); cEVover=$('cEVover');
-  $('evoSize').textContent=24;
   setupEvoHover();
   document.querySelectorAll('#tabs button').forEach(b=> b.onclick=()=>setScreen(b.dataset.scr));
   // 🧬 진화 탭
