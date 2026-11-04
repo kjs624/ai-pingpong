@@ -8,7 +8,7 @@
 //  평가는 학습과 다른 난수열(시드·체크포인트마다 고정, 두 방법이 같은 공을 받음)을 써서 학습 경로에 영향을 주지 않는다.
 //
 //  사용법: node compare-es.js [--seeds 1,2,3] [--balls 2000,5000,10000,20000,30000] [--k 60] [--points 200]
-//                             [--methods evo,es] [--sigma 0.1] [--alpha 0.05] [--trials 12] [--init best|rand] [--pick brain|top]
+//                             [--methods evo,es] [--sigma 0.1] [--alpha 0.05] [--pairs 48] [--trials 3] [--elite 0] [--init best|rand] [--pick brain|top]
 // =====================================================================
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
@@ -19,7 +19,8 @@ const marks = opt('--balls', '2000,5000,10000,20000,30000').split(',').map(Numbe
 const K = Number(opt('--k', 60)), PTS = Number(opt('--points', 200));
 const methods = opt('--methods', 'evo,es').split(',');
 const esOpt = {}; if (opt('--sigma')) esOpt.sigma = Number(opt('--sigma')); if (opt('--alpha')) esOpt.alpha = Number(opt('--alpha')); if (opt('--trials')) esOpt.trials = Number(opt('--trials')); if (opt('--init')) esOpt.init = opt('--init');
-const pick = opt('--pick', 'brain');   // es만: brain = bestBrain()(중심), top = 그 세대 최고 개체
+if (opt('--pairs')) esOpt.pairs = Number(opt('--pairs')); if (opt('--elite') === '0') esOpt.elite = false;
+const pick = opt('--pick', 'brain');   // es만: brain = bestBrain()(엘리트 중심), top = 그 세대 최고 개체
 
 const html = fs.readFileSync(path.join(__dirname, 'ai-pingpong-rl.html'), 'utf8');
 const ctx = { console }; vm.createContext(ctx);
