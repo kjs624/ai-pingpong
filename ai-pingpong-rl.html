@@ -232,6 +232,7 @@
         <button id="benchBtn">🔬 지금 검증 (200점)</button>
       </div>
       <div id="fastProg"></div>
+      <div class="pnote" id="lamRow" title="0이면 기존 Q-러닝 TD(0)와 같음">🔗 적격도 λ <input type="range" id="lamSlider" min="0" max="0.95" step="0.05" value="0" style="width:110px; vertical-align:middle;"> <b id="lamVal">0 (TD(0))</b> — 보상을 미리 움직인 결정까지 나눠 줌(Q(λ))</div>
       <div id="bench"></div>
       <details open><summary>🤖 로봇이 받는 정보 (🔵 블루 · 실시간)</summary>
         <div class="pnote" id="obsHead" style="margin-top:4px"></div>
@@ -545,6 +546,7 @@ class Match {
     const o=observe(p,s);
     p.obs=o;
     if(p.brain.type==='nn'){ nnAct(p, o); return; }        // 🧬 진화한 신경망 뇌: 관측 → 행동 (학습 없음, 세대가 바뀌며 진화)
+    if(p.brain.lambda!=null) qlUpdate(p,o);                // 🔗 Q(λ) 뇌: 적격도로 업데이트(방법: qlambda 구역). 아래 TD(0) 업데이트는 건너뜀
     if(p.swingPend && p.swingPend.ready){                 // 친 공이 상대 코트에 들어감 → 그 스윙을 보상과 함께 업데이트
       const w=p.swingPend; for(let i=0;i<NAX;i++) qLearn(p.brain,AXES[i],w.keys[i],w.a[i],w.r,o.keys[i]);
       p.swingPend=null;
@@ -552,6 +554,7 @@ class Match {
     if(p.pend) for(let i=0;i<NAX;i++) qLearn(p.brain,AXES[i],p.pend.keys[i],p.pend.a[i],p.pend.r,o.keys[i]);
     const a=AXES.map((ax,i)=>choose(p.brain,ax,o.keys[i]));
     p.pend={keys:o.keys, a, r:0};
+    if(p.brain.lambda!=null) qlPush(p,o.keys,a);           // 🔗 Q(λ): 새 (상태,행동)을 적격도 목록에
     p.act=a;
     const ego=-p.side;                                   // 자기 기준 → 월드 좌표
     p.cmd[0]=ego*VLEV[a[0]]; p.cmd[1]=VLEV[a[1]]; p.cmd[2]=ego*VLEV[a[2]];
@@ -635,6 +638,7 @@ class Match {
     for(const p of [this.p1,this.p2]){
       const outcome = winner ? (p===winner?CFG.rWin:CFG.rLose) : (p===missed?CFG.rVoidMiss:0);
       if(winner || terminal) p.ret+=outcome;
+      if(p.brain.lambda!=null) qlSettle(p, winner || terminal, outcome);   // 🔗 Q(λ): 종료 업데이트를 적격도로(방법: qlambda 구역)
       const sw=p.swingPend;                // 결과가 안 나온 채 판이 끝남(네트·아웃 등) → 승패는 그 스윙의 몫
       if(sw){
         if(winner || terminal){ const r=sw.r+outcome; for(let i=0;i<NAX;i++) qLearn(p.brain,AXES[i],sw.keys[i],sw.a[i],r,null); }
@@ -1002,6 +1006,82 @@ registerMethod({
   summary(L){
     const h=L.evo.history.at(-1);
     return h ? '마지막 세대: 최고 점수 '+h.best.toFixed(2)+' · 평균 '+h.mean.toFixed(2)+' · 최고 개체 연속 평균 '+h.bestAvgStreak.toFixed(1)+'개' : '아직 세대가 끝나지 않음';
+  },
+});
+
+// ── 방법: qlambda — 🔗 축별 Watkins Q(λ) 적격도 추적 셀프플레이 ──
+//  TD(0)는 보상을 바로 앞 결정에만 준다. Q(λ)는 축마다 최근 QL_N개 (상태,행동)과 적격도 e를 들고 있다가
+//  TD 오차를 α·δ·e로 모두에 나눠 준다 → 공이 오기 전 '미리 출발'한 결정에도 보상이 한 번에 닿는다.
+//  · 결정마다 e ← γ·λ·e, QL_EMIN보다 작아지면 버림. 같은 (상태,행동)이 다시 나오면 e=1로 교체(replacing trace)
+//  · Watkins: 고른 행동이 탐욕적(Q 최대, 동점 포함)이 아니면 = 탐험이면 그 축의 적격도를 비운다
+//  · 친 스윙: 치는 순간의 적격도(스윙 + 준비 동작)를 떼어 swingPend.tr에 두었다가, 넘기기·승패 보상이 오면 그 적격도로 나눠 준다.
+//    스윙 뒤의 결정들은 새 적격도 목록에서 시작한다
+//  · λ는 전역 CFG가 아니라 뇌마다(brain.lambda). 없으면(기존 q) decide·settle이 이 구역을 부르지 않아 TD(0) 그대로.
+//    λ=0이면 TD(0)와 같은 계산(검증: 시드 1에서 q와 같은 결과)
+const QL_N=30, QL_EMIN=0.01, QL_DEFAULT=0.8;
+function qlTrace(p){ return p.el || (p.el=AXES.map(()=>({row:[], a:[], e:[]}))); }   // 선수(블루·레드)마다 따로: 셀프플레이는 뇌만 공유
+function qlClear(T){ for(const t of T){ t.row.length=0; t.a.length=0; t.e.length=0; } }
+// 한 축의 TD 오차 δ = r + γ·max Q(s') − Q(s,a) 를 적격도 목록 t 전체에 α·δ·e로
+function qlStep(br,i,t,key,a,r,nextKey){
+  const ax=AXES[i], q=qRow(br,ax,key);
+  let target=r;
+  if(nextKey!=null){ const nq=qRow(br,ax,nextKey); let m=-Infinity; for(let k=0;k<NA;k++) if(nq[k]>m) m=nq[k]; target+=CFG.gamma*m; }
+  const td=target-q[a], d=CFG.alpha*td, R=t.row, A=t.a, E=t.e;
+  let self=false;
+  for(let j=0;j<R.length;j++){ R[j][A[j]]+=d*E[j]; if(R[j]===q && A[j]===a) self=true; }
+  if(!self) q[a]+=d;                       // 목록에 없으면(드묾) 그 결정만 TD(0)처럼
+  br.updates++; br.tdAvg+=0.002*(Math.abs(td)-br.tdAvg);
+}
+// decide: 관측 직후 — 막 친 스윙의 적격도 떼어 두기, 넘긴 스윙·직전 결정 업데이트
+function qlUpdate(p,o){
+  const br=p.brain; if(br.frozen) return;
+  const T=qlTrace(p), sw=p.swingPend, pe=p.pend;
+  if(sw && !sw.tr){ sw.tr=T.map(t=>({row:t.row.slice(), a:t.a.slice(), e:t.e.slice()})); qlClear(T); }
+  if(sw && sw.ready){ for(let i=0;i<NAX;i++) qlStep(br,i,sw.tr[i],sw.keys[i],sw.a[i],sw.r,o.keys[i]); p.swingPend=null; }
+  if(pe){ for(let i=0;i<NAX;i++) qlStep(br,i,T[i],pe.keys[i],pe.a[i],pe.r,o.keys[i]); p.pend=null; }
+}
+// decide: 행동을 고른 뒤 — 적격도 감소(γλ), 탐험이면 비우기(Watkins), 새 (상태,행동)을 e=1로
+function qlPush(p,keys,a){
+  const br=p.brain; if(br.frozen) return;
+  const T=qlTrace(p), g=CFG.gamma*br.lambda;
+  for(let i=0;i<NAX;i++){
+    const t=T[i], row=qRow(br,AXES[i],keys[i]), ai=a[i], R=t.row, A=t.a, E=t.e;
+    let m=-Infinity; for(let k=0;k<NA;k++) if(row[k]>m) m=row[k];
+    let n=0;
+    if(row[ai]>=m-1e-9){                   // 탐욕적 행동 → 적격도 유지(감소)
+      for(let j=0;j<R.length;j++){ const e=E[j]*g; if(e<QL_EMIN || (R[j]===row && A[j]===ai)) continue; R[n]=R[j]; A[n]=A[j]; E[n]=e; n++; }
+      if(n>=QL_N){ R.splice(0,n-QL_N+1); A.splice(0,n-QL_N+1); E.splice(0,n-QL_N+1); n=QL_N-1; }
+    }
+    R.length=A.length=E.length=n;
+    R.push(row); A.push(ai); E.push(1);
+  }
+}
+// settle: 판이 끝남 — 스윙(승패 포함)과 마지막 결정의 종료 업데이트, 적격도 비우기
+function qlSettle(p,fin,outcome){
+  const br=p.brain; if(br.frozen) return;
+  const T=qlTrace(p), sw=p.swingPend, pe=p.pend;
+  if(fin){
+    if(sw) for(let i=0;i<NAX;i++) qlStep(br,i,sw.tr?sw.tr[i]:T[i],sw.keys[i],sw.a[i],sw.r+outcome,null);
+    if(pe) for(let i=0;i<NAX;i++) qlStep(br,i,T[i],pe.keys[i],pe.a[i],pe.r+(sw?0:outcome),null);
+  }
+  p.swingPend=null; p.pend=null; qlClear(T);
+}
+registerMethod({
+  id:'qlambda', icon:'🔗', name:'Q(λ) 적격도 추적', color:'#2fa36b',
+  note:'Q-러닝과 같은 표·보상·셀프플레이에, 축마다 최근 30개 결정의 적격도(λ='+QL_DEFAULT+')를 더함. 보상이 미리 출발한 결정까지 한 번에 퍼짐(Watkins: 탐험하면 비움, 친 스윙 보상도 준비 동작까지).',
+  defaultTrain:5000, checkpoints:[0,250,500,1000,1500,2000,3000,5000,8000,12000,20000],
+  create(opt){
+    const br=makeBrain(); br.lambda=(opt && opt.lambda!=null) ? opt.lambda : QL_DEFAULT; let match=null;
+    return {
+      unit:'판', brain:()=>br, progress:()=>br.episodes, balls:()=>br.balls,
+      run(n){ if(!match) match=new Match(br,br); for(let i=0;i<n;i++) match.step(); },
+      trainTo(n){ match=trainSelfPlay(br, n-br.episodes, match); },
+      label:()=>br.episodes+'판',
+    };
+  },
+  summary(L){
+    const br=L.brain(), sc=stateCounts(br);
+    return 'λ='+br.lambda+' · Q-테이블 상태 수: x '+sc.x+' · y '+sc.y+' · z '+sc.z+' · 손목 위아래 '+sc.p+' · 손목 좌우 '+sc.w+', TD 업데이트 '+br.updates+'회';
   },
 });
 
@@ -1822,6 +1902,7 @@ function boot(){
   $('resetBtn').onclick=()=>{
     running=false; fast=null; fastProg.textContent=''; benchEl.textContent='';
     brain=makeBrain(); curve=[]; nextEvalAt=0; evalJobs=[]; benchJob=null;   // 새 빈 뇌로 처음부터
+    setLambda(+$('lamSlider').value);                                       // 🔗 λ 슬라이더 값 유지
     setMode(mode); maybeEvaluate();
   };
   $('modeTrain').onclick=()=>setMode('train');
@@ -1862,6 +1943,13 @@ function boot(){
   // 탐험율(ε) 수동 조절: 슬라이더를 움직이면 즉시 반영 + 자동감소 고정 (학습 중인 뇌에 적용)
   epsSlider.oninput=()=>{ const v=parseFloat(epsSlider.value); brain.eps=v; brain.epsLock=true; epsLockChk.checked=true; epsVal.textContent=v.toFixed(2); };
   epsLockChk.onchange=()=>{ brain.epsLock=epsLockChk.checked; };
+  $('lamSlider').oninput=()=>setLambda(+$('lamSlider').value);
+}
+// 🔗 Q(λ) 슬라이더: 학습 중인 뇌의 λ (0이면 brain.lambda 없음 = 기존 TD(0) 그대로). 바꾸면 진행 중인 적격도는 비움
+function setLambda(v){
+  if(v>0) brain.lambda=v; else delete brain.lambda;
+  for(const m of [game, fast&&fast.m]) if(m) m.p1.el=m.p2.el=null;
+  document.getElementById('lamVal').textContent = v>0 ? v.toFixed(2) : '0 (TD(0))';
 }
 addEventListener('load', boot);
 </script>
